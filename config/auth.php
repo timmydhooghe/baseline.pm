@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Stakeholder;
 use App\Models\User;
 
 return [
@@ -42,6 +43,11 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        'stakeholder' => [
+            'driver' => 'session',
+            'provider' => 'stakeholders',
+        ],
     ],
 
     /*
@@ -67,10 +73,10 @@ return [
             'model' => env('AUTH_MODEL', User::class),
         ],
 
-        // 'users' => [
-        //     'driver' => 'database',
-        //     'table' => 'users',
-        // ],
+        'stakeholders' => [
+            'driver' => 'eloquent',
+            'model' => Stakeholder::class,
+        ],
     ],
 
     /*

@@ -1,388 +1,1144 @@
 import { Head, Link, usePage } from '@inertiajs/react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { cn } from '@/lib/utils';
 import { dashboard, login } from '@/routes';
-import { register } from '@/routes';
+
+const btn =
+    'inline-block cursor-pointer rounded-[3px] text-center font-bold transition-all duration-[180ms]';
+const btnDark = `${btn} bg-ink text-paper hover:bg-rust`;
+const btnOutline = `${btn} border-[1.5px] border-ink`;
+const ctaSize = 'px-6.5 py-3.5 text-[14px]';
+const lift =
+    'transition-[translate,box-shadow] duration-200 hover:-translate-x-[3px] hover:-translate-y-[3px] hover:shadow-[6px_6px_0_var(--color-ink)]';
+const kicker = 'font-plex-mono text-[12px] font-semibold';
+const sectionTitle =
+    'mt-2.5 font-display text-[38px] font-bold tracking-[-.02em]';
+const cardLabel = 'font-plex-mono text-[11px] font-semibold text-stone';
+const cardTitle = 'mt-2 font-display text-[19px] font-bold';
+const highlight = 'bg-sun px-[5px]';
+
+/**
+ * Reveals its children with a rise-in transition once scrolled into view,
+ * mirroring the design's IntersectionObserver behavior: elements already in
+ * the initial viewport render as-is, everything below animates in on scroll.
+ */
+function Reveal({
+    delay = 0,
+    className,
+    children,
+}: {
+    delay?: number;
+    className?: string;
+    children: ReactNode;
+}) {
+    const ref = useRef<HTMLDivElement>(null);
+    const [reveal, setReveal] = useState<'initial' | 'hidden' | 'visible'>(
+        'initial',
+    );
+
+    useLayoutEffect(() => {
+        const element = ref.current;
+
+        if (
+            !element ||
+            element.getBoundingClientRect().top < window.innerHeight * 0.92
+        ) {
+            return;
+        }
+
+        setReveal('hidden');
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries.some((entry) => entry.isIntersecting)) {
+                    setReveal('visible');
+                    observer.disconnect();
+                }
+            },
+            { rootMargin: '0px 0px -8% 0px' },
+        );
+        observer.observe(element);
+
+        return () => observer.disconnect();
+    }, []);
+
+    return (
+        <div
+            ref={ref}
+            className={cn(
+                className,
+                reveal !== 'initial' &&
+                    'transition-[opacity,translate] duration-[650ms] ease-[cubic-bezier(.2,.7,.3,1)]',
+                reveal === 'hidden' && 'translate-y-6 opacity-0',
+            )}
+            style={
+                reveal === 'visible'
+                    ? { transitionDelay: `${delay}s` }
+                    : undefined
+            }
+        >
+            {children}
+        </div>
+    );
+}
+
+function TourModal({
+    closing,
+    onClose,
+}: {
+    closing: boolean;
+    onClose: () => void;
+}) {
+    return (
+        <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Baseline 2-minute tour"
+            onClick={onClose}
+            className={cn(
+                'fixed inset-0 z-[100] flex items-center justify-center bg-ink/82 p-10',
+                closing ? 'animate-overlay-out' : 'animate-overlay-in',
+            )}
+        >
+            <div
+                onClick={(event) => event.stopPropagation()}
+                className={cn(
+                    'relative w-[min(920px,100%)] border-2 border-ink bg-ink shadow-[12px_12px_0_var(--color-rust)]',
+                    closing ? 'animate-modal-out' : 'animate-modal-in',
+                )}
+            >
+                <div className="flex items-center gap-2.5 border-b-2 border-ink bg-paper px-4 py-3">
+                    <span className="font-plex-mono text-[11.5px] font-semibold text-ink">
+                        BASELINE — 2-MIN TOUR
+                    </span>
+                    <span className="font-plex-mono text-[10.5px] text-stone">
+                        placeholder footage — final cut in production
+                    </span>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="ml-auto cursor-pointer border-[1.5px] border-ink px-2 py-0.5 font-plex-mono text-[12px] font-bold text-ink transition-colors duration-[180ms] hover:border-rust hover:text-rust"
+                    >
+                        CLOSE ×
+                    </button>
+                </div>
+                <div className="aspect-video bg-black">
+                    <iframe
+                        src="https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1"
+                        className="block h-full w-full border-0"
+                        allow="autoplay; encrypted-media; fullscreen"
+                        title="Baseline product tour"
+                    />
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function PositionCard() {
+    return (
+        <div className="w-[340px] flex-none animate-rise-in border-2 border-ink bg-white px-6.5 py-6 shadow-[8px_8px_0_var(--color-ink)] [animation-delay:.25s] [animation-duration:.7s]">
+            <div className="flex items-baseline">
+                <div className="text-[11px] font-bold tracking-[.08em] text-stone">
+                    THE POSITION — LIVE
+                </div>
+                <div className="ml-auto font-plex-mono text-[10px] text-moss">
+                    <span className="animate-pulse-dot">●</span> SYNCED 4 MIN
+                    AGO
+                </div>
+            </div>
+            <div className="mt-3.5 grid gap-2.5 font-plex-mono">
+                <div>
+                    <div className="flex justify-between text-[11.5px]">
+                        <span>APPROVED</span>
+                        <b>249.0k</b>
+                    </div>
+                    <div className="mt-[3px] h-[26px] origin-left animate-grow-bar bg-ink [animation-delay:.55s]" />
+                </div>
+                <div>
+                    <div className="flex justify-between text-[11.5px]">
+                        <span>ACCEPTED</span>
+                        <b>76.1k</b>
+                    </div>
+                    <div className="mt-[3px] h-[26px] w-[31%] origin-left animate-grow-bar bg-moss [animation-delay:.7s]" />
+                </div>
+                <div>
+                    <div className="flex justify-between text-[11.5px]">
+                        <span>PENDING CR</span>
+                        <b>18.4k</b>
+                    </div>
+                    <div className="mt-[3px] h-[26px] w-[7.5%] origin-left animate-grow-bar border border-ochre bg-[repeating-linear-gradient(45deg,var(--color-ochre),var(--color-ochre)_4px,#fff_4px,#fff_8px)] [animation-delay:.85s]" />
+                </div>
+                <div>
+                    <div className="flex justify-between text-[11.5px] text-rust">
+                        <span>UNBILLED RISK</span>
+                        <b>9.2k</b>
+                    </div>
+                    <div className="mt-[3px] h-[26px] w-[4%] origin-left animate-grow-bar border-2 border-dashed border-rust [animation-delay:1s]" />
+                </div>
+            </div>
+            <div className="mt-3.5 border-t border-sand-300 pt-3 text-[12.5px]">
+                Baseline's job: keep the red block at{' '}
+                <b className="bg-sun px-1">zero</b>.
+            </div>
+        </div>
+    );
+}
+
+const navLinks = [
+    { href: '#how', label: 'PRODUCT' },
+    { href: '#position', label: 'THE POSITION' },
+    { href: '#pricing', label: 'PRICING' },
+    { href: '#manifesto', label: 'MANIFESTO' },
+];
+
+const customers = [
+    'NORTHBOUND',
+    'HELIX DIGITAL',
+    'STUDIO K',
+    'PORTA',
+    'FIELDWORK',
+    'MOLENAAR&CO',
+];
+
+const heroStats = [
+    { value: '6.2pts', label: 'margin recovered avg.' },
+    { value: '11 days', label: 'faster CR sign-off' },
+    { value: '0', label: 'invoice disputes' },
+];
+
+const problems = [
+    {
+        stat: '€9,200 gone',
+        statColor: 'text-rust',
+        title: 'Scope creep is invisible until invoice time',
+        body: '"Small favours" land in the sprint without a contract line. Nobody decided to do them for free — nobody decided at all.',
+        cellClass: 'border-r border-sand-400 py-6 pr-7.5',
+        delay: 0,
+    },
+    {
+        stat: '4 days, no answer',
+        statColor: 'text-ochre',
+        title: 'Change requests die in email threads',
+        body: 'The approval sits unanswered — but the work starts anyway. When the invoice lands, the client remembers a conversation, not an agreement.',
+        cellClass: 'border-r border-sand-400 px-7.5 py-6',
+        delay: 0.08,
+    },
+    {
+        stat: '11 days late',
+        statColor: 'text-rust',
+        title: 'Client delays become your penalty',
+        body: 'Their late test data, your late milestone. Without day-by-day attribution, you eat the slip — or fight about it.',
+        cellClass: 'py-6 pl-7.5',
+        delay: 0.16,
+    },
+];
 
 export default function Welcome() {
     const { auth } = usePage().props;
+    const [tour, setTour] = useState<'closed' | 'open' | 'closing'>('closed');
+
+    const closeTour = () =>
+        setTour((current) => (current === 'open' ? 'closing' : current));
+
+    useEffect(() => {
+        if (tour !== 'closing') {
+            return;
+        }
+
+        const timer = setTimeout(() => setTour('closed'), 210);
+
+        return () => clearTimeout(timer);
+    }, [tour]);
+
+    useEffect(() => {
+        if (tour !== 'open') {
+            return;
+        }
+
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setTour((current) =>
+                    current === 'open' ? 'closing' : current,
+                );
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [tour]);
 
     return (
         <>
-            <Head title="Welcome" />
-            <div className="flex min-h-screen flex-col items-center bg-[#FDFDFC] p-6 text-[#1b1b18] lg:justify-center lg:p-8 dark:bg-[#0a0a0a]">
-                <header className="mb-6 w-full max-w-[335px] text-sm not-has-[nav]:hidden lg:max-w-4xl">
-                    <nav className="flex items-center justify-end gap-4">
-                        {auth.user ? (
+            <Head title="Fixed price. Not fixed losses.">
+                <link rel="preconnect" href="https://fonts.bunny.net" />
+                <link
+                    rel="stylesheet"
+                    href="https://fonts.bunny.net/css?family=ibm-plex-mono:400,500,600|onest:400,600,700|space-grotesk:700&display=swap"
+                />
+                <meta
+                    name="description"
+                    content="Baseline shows agencies their commercial position on fixed-price work every morning — scope creep priced, change requests signed, delays attributed."
+                />
+            </Head>
+            <div className="min-h-screen min-w-[1100px] bg-paper font-onest text-ink selection:bg-sun">
+                <header className="sticky top-0 z-10 flex items-center gap-[26px] border-b-2 border-ink bg-paper px-14 py-5">
+                    <div className="font-display text-[18px] font-bold tracking-[-.01em]">
+                        BASELINE
+                    </div>
+                    {navLinks.map((link) => (
+                        <a
+                            key={link.label}
+                            href={link.href}
+                            className="text-[12.5px] font-semibold text-stone transition-colors duration-150 hover:text-rust"
+                        >
+                            {link.label}
+                        </a>
+                    ))}
+                    {auth.user ? (
+                        <Link
+                            href={dashboard()}
+                            className={cn(
+                                btnDark,
+                                'ml-auto px-[17px] py-[9px] text-[12.5px]',
+                            )}
+                        >
+                            DASHBOARD →
+                        </Link>
+                    ) : (
+                        <>
                             <Link
-                                href={dashboard()}
-                                className="inline-block rounded-sm border border-[#19140035] px-5 py-1.5 text-sm leading-normal text-[#1b1b18] hover:border-[#1915014a] dark:border-[#3E3E3A] dark:text-[#EDEDEC] dark:hover:border-[#62605b]"
+                                href={login()}
+                                className={cn(
+                                    btnOutline,
+                                    'ml-auto px-4 py-2 text-[12.5px] hover:bg-ink hover:text-paper',
+                                )}
                             >
-                                Dashboard
+                                SIGN IN
                             </Link>
-                        ) : (
-                            <>
-                                <Link
-                                    href={login()}
-                                    className="inline-block rounded-sm border border-transparent px-5 py-1.5 text-sm leading-normal text-[#1b1b18] hover:border-[#19140035] dark:text-[#EDEDEC] dark:hover:border-[#3E3E3A]"
-                                >
-                                    Log in
-                                </Link>
-                                <Link
-                                    href={register()}
-                                    className="inline-block rounded-sm border border-[#19140035] px-5 py-1.5 text-sm leading-normal text-[#1b1b18] hover:border-[#1915014a] dark:border-[#3E3E3A] dark:text-[#EDEDEC] dark:hover:border-[#62605b]"
-                                >
-                                    Register
-                                </Link>
-                            </>
-                        )}
-                    </nav>
+                            <Link
+                                href={login()}
+                                className={cn(
+                                    btnDark,
+                                    'px-[17px] py-[9px] text-[12.5px]',
+                                )}
+                            >
+                                GET BASELINE →
+                            </Link>
+                        </>
+                    )}
                 </header>
-                <div className="flex w-full items-center justify-center opacity-100 transition-opacity duration-750 lg:grow starting:opacity-0">
-                    <main className="flex w-full max-w-[335px] flex-col-reverse lg:max-w-4xl lg:flex-row">
-                        <div className="flex-1 rounded-br-lg rounded-bl-lg bg-white p-6 pb-12 text-[13px] leading-[20px] shadow-[inset_0px_0px_0px_1px_rgba(26,26,0,0.16)] lg:rounded-tl-lg lg:rounded-br-none lg:p-20 dark:bg-[#161615] dark:text-[#EDEDEC] dark:shadow-[inset_0px_0px_0px_1px_#fffaed2d]">
-                            <h1 className="mb-1 font-medium">
-                                Let's get started
-                            </h1>
-                            <p className="mb-2 text-[#706f6c] dark:text-[#A1A09A]">
-                                Laravel has an incredibly rich ecosystem.
-                                <br />
-                                We suggest starting with the following.
-                            </p>
-                            <ul className="mb-4 flex flex-col lg:mb-6">
-                                <li className="relative flex items-center gap-4 py-2 before:absolute before:top-1/2 before:bottom-0 before:left-[0.4rem] before:border-l before:border-[#e3e3e0] dark:before:border-[#3E3E3A]">
-                                    <span className="relative bg-white py-1 dark:bg-[#161615]">
-                                        <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-[#e3e3e0] bg-[#FDFDFC] shadow-[0px_0px_1px_0px_rgba(0,0,0,0.03),0px_1px_2px_0px_rgba(0,0,0,0.06)] dark:border-[#3E3E3A] dark:bg-[#161615]">
-                                            <span className="h-1.5 w-1.5 rounded-full bg-[#dbdbd7] dark:bg-[#3E3E3A]" />
-                                        </span>
-                                    </span>
-                                    <span>
-                                        Read the
-                                        <a
-                                            href="https://laravel.com/docs"
-                                            target="_blank"
-                                            className="ml-1 inline-flex items-center space-x-1 font-medium text-[#f53003] underline underline-offset-4 dark:text-[#FF4433]"
-                                        >
-                                            <span>Documentation</span>
-                                            <svg
-                                                width={10}
-                                                height={11}
-                                                viewBox="0 0 10 11"
-                                                fill="none"
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                className="h-2.5 w-2.5"
-                                            >
-                                                <path
-                                                    d="M7.70833 6.95834V2.79167H3.54167M2.5 8L7.5 3.00001"
-                                                    stroke="currentColor"
-                                                    strokeLinecap="square"
-                                                />
-                                            </svg>
-                                        </a>
-                                    </span>
-                                </li>
-                                <li className="relative flex items-center gap-4 py-2 before:absolute before:top-0 before:bottom-1/2 before:left-[0.4rem] before:border-l before:border-[#e3e3e0] dark:before:border-[#3E3E3A]">
-                                    <span className="relative bg-white py-1 dark:bg-[#161615]">
-                                        <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-[#e3e3e0] bg-[#FDFDFC] shadow-[0px_0px_1px_0px_rgba(0,0,0,0.03),0px_1px_2px_0px_rgba(0,0,0,0.06)] dark:border-[#3E3E3A] dark:bg-[#161615]">
-                                            <span className="h-1.5 w-1.5 rounded-full bg-[#dbdbd7] dark:bg-[#3E3E3A]" />
-                                        </span>
-                                    </span>
-                                    <span>
-                                        Watch video tutorials at
-                                        <a
-                                            href="https://laracasts.com"
-                                            target="_blank"
-                                            className="ml-1 inline-flex items-center space-x-1 font-medium text-[#f53003] underline underline-offset-4 dark:text-[#FF4433]"
-                                        >
-                                            <span>Laracasts</span>
-                                            <svg
-                                                width={10}
-                                                height={11}
-                                                viewBox="0 0 10 11"
-                                                fill="none"
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                className="h-2.5 w-2.5"
-                                            >
-                                                <path
-                                                    d="M7.70833 6.95834V2.79167H3.54167M2.5 8L7.5 3.00001"
-                                                    stroke="currentColor"
-                                                    strokeLinecap="square"
-                                                />
-                                            </svg>
-                                        </a>
-                                    </span>
-                                </li>
-                            </ul>
-                            <ul className="flex gap-3 text-sm leading-normal">
-                                <li>
-                                    <a
-                                        href="https://cloud.laravel.com"
-                                        target="_blank"
-                                        className="inline-block rounded-sm border border-black bg-[#1b1b18] px-5 py-1.5 text-sm leading-normal text-white hover:border-black hover:bg-black dark:border-[#eeeeec] dark:bg-[#eeeeec] dark:text-[#1C1C1A] dark:hover:border-white dark:hover:bg-white"
-                                    >
-                                        Deploy now
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
-                        <div className="relative -mb-px aspect-[335/364] w-full shrink-0 overflow-hidden rounded-t-lg bg-[#fff2f2] lg:mb-0 lg:-ml-px lg:aspect-auto lg:w-[438px] lg:rounded-t-none lg:rounded-r-lg dark:bg-[#1D0002]">
-                            {/* Laravel Logo */}
-                            <svg
-                                className="w-full max-w-none translate-y-0 text-[#F53003] opacity-100 transition-all duration-750 dark:text-[#F61500] starting:opacity-0 motion-safe:starting:translate-y-6"
-                                viewBox="0 0 438 104"
-                                fill="none"
-                                xmlns="http://www.w3.org/2000/svg"
+
+                <section className="mx-auto flex max-w-[1200px] items-center gap-14 px-14 pt-19 pb-16">
+                    <div className="flex-[1.4]">
+                        <h1 className="animate-rise-in font-display text-[64px] leading-none font-bold tracking-[-.03em]">
+                            Fixed price.
+                            <br />
+                            Not fixed{' '}
+                            <span className="bg-sun px-2">losses</span>.
+                        </h1>
+                        <p className="mt-5.5 max-w-[460px] animate-rise-in text-[16.5px] leading-[1.65] text-pretty text-stone [animation-delay:.1s]">
+                            Agencies lose 4–9 margin points per fixed-price
+                            project to unlogged scope, unsigned changes and
+                            unattributed delays. Baseline shows your commercial
+                            position every morning — and the three moves that
+                            protect it.
+                        </p>
+                        <div className="mt-7.5 flex animate-rise-in gap-3 [animation-delay:.18s]">
+                            <Link
+                                href={login()}
+                                className={cn(btnDark, ctaSize)}
                             >
-                                <path
-                                    d="M17.2036 -3H0V102.197H49.5189V86.7187H17.2036V-3Z"
-                                    fill="currentColor"
-                                />
-                                <path
-                                    d="M110.256 41.6337C108.061 38.1275 104.945 35.3731 100.905 33.3681C96.8667 31.3647 92.8016 30.3618 88.7131 30.3618C83.4247 30.3618 78.5885 31.3389 74.201 33.2923C69.8111 35.2456 66.0474 37.928 62.9059 41.3333C59.7643 44.7401 57.3198 48.6726 55.5754 53.1293C53.8287 57.589 52.9572 62.274 52.9572 67.1813C52.9572 72.1925 53.8287 76.8995 55.5754 81.3069C57.3191 85.7173 59.7636 89.6241 62.9059 93.0293C66.0474 96.4361 69.8119 99.1155 74.201 101.069C78.5885 103.022 83.4247 103.999 88.7131 103.999C92.8016 103.999 96.8667 102.997 100.905 100.994C104.945 98.9911 108.061 96.2359 110.256 92.7282V102.195H126.563V32.1642H110.256V41.6337ZM108.76 75.7472C107.762 78.4531 106.366 80.8078 104.572 82.8112C102.776 84.8161 100.606 86.4183 98.0637 87.6206C95.5202 88.823 92.7004 89.4238 89.6103 89.4238C86.5178 89.4238 83.7252 88.823 81.2324 87.6206C78.7388 86.4183 76.5949 84.8161 74.7998 82.8112C73.004 80.8078 71.6319 78.4531 70.6856 75.7472C69.7356 73.0421 69.2644 70.1868 69.2644 67.1821C69.2644 64.1758 69.7356 61.3205 70.6856 58.6154C71.6319 55.9102 73.004 53.5571 74.7998 51.5522C76.5949 49.5495 78.738 47.9451 81.2324 46.7427C83.7252 45.5404 86.5178 44.9396 89.6103 44.9396C92.7012 44.9396 95.5202 45.5404 98.0637 46.7427C100.606 47.9451 102.776 49.5487 104.572 51.5522C106.367 53.5571 107.762 55.9102 108.76 58.6154C109.756 61.3205 110.256 64.1758 110.256 67.1821C110.256 70.1868 109.756 73.0421 108.76 75.7472Z"
-                                    fill="currentColor"
-                                />
-                                <path
-                                    d="M242.805 41.6337C240.611 38.1275 237.494 35.3731 233.455 33.3681C229.416 31.3647 225.351 30.3618 221.262 30.3618C215.974 30.3618 211.138 31.3389 206.75 33.2923C202.36 35.2456 198.597 37.928 195.455 41.3333C192.314 44.7401 189.869 48.6726 188.125 53.1293C186.378 57.589 185.507 62.274 185.507 67.1813C185.507 72.1925 186.378 76.8995 188.125 81.3069C189.868 85.7173 192.313 89.6241 195.455 93.0293C198.597 96.4361 202.361 99.1155 206.75 101.069C211.138 103.022 215.974 103.999 221.262 103.999C225.351 103.999 229.416 102.997 233.455 100.994C237.494 98.9911 240.611 96.2359 242.805 92.7282V102.195H259.112V32.1642H242.805V41.6337ZM241.31 75.7472C240.312 78.4531 238.916 80.8078 237.122 82.8112C235.326 84.8161 233.156 86.4183 230.614 87.6206C228.07 88.823 225.251 89.4238 222.16 89.4238C219.068 89.4238 216.275 88.823 213.782 87.6206C211.289 86.4183 209.145 84.8161 207.35 82.8112C205.554 80.8078 204.182 78.4531 203.236 75.7472C202.286 73.0421 201.814 70.1868 201.814 67.1821C201.814 64.1758 202.286 61.3205 203.236 58.6154C204.182 55.9102 205.554 53.5571 207.35 51.5522C209.145 49.5495 211.288 47.9451 213.782 46.7427C216.275 45.5404 219.068 44.9396 222.16 44.9396C225.251 44.9396 228.07 45.5404 230.614 46.7427C233.156 47.9451 235.326 49.5487 237.122 51.5522C238.917 53.5571 240.312 55.9102 241.31 58.6154C242.306 61.3205 242.806 64.1758 242.806 67.1821C242.805 70.1868 242.305 73.0421 241.31 75.7472Z"
-                                    fill="currentColor"
-                                />
-                                <path
-                                    d="M438 -3H421.694V102.197H438V-3Z"
-                                    fill="currentColor"
-                                />
-                                <path
-                                    d="M139.43 102.197H155.735V48.2834H183.712V32.1665H139.43V102.197Z"
-                                    fill="currentColor"
-                                />
-                                <path
-                                    d="M324.49 32.1665L303.995 85.794L283.498 32.1665H266.983L293.748 102.197H314.242L341.006 32.1665H324.49Z"
-                                    fill="currentColor"
-                                />
-                                <path
-                                    d="M376.571 30.3656C356.603 30.3656 340.797 46.8497 340.797 67.1828C340.797 89.6597 356.094 104 378.661 104C391.29 104 399.354 99.1488 409.206 88.5848L398.189 80.0226C398.183 80.031 389.874 90.9895 377.468 90.9895C363.048 90.9895 356.977 79.3111 356.977 73.269H411.075C413.917 50.1328 398.775 30.3656 376.571 30.3656ZM357.02 61.0967C357.145 59.7487 359.023 43.3761 376.442 43.3761C393.861 43.3761 395.978 59.7464 396.099 61.0967H357.02Z"
-                                    fill="currentColor"
-                                />
-                            </svg>
-
-                            {/* 13 */}
-                            <svg
-                                className="relative -mt-[6.6rem] -ml-8 w-[438px] max-w-none [--stroke-color:#1B1B18] lg:ml-0 dark:[--stroke-color:#FF750F]"
-                                viewBox="0 0 440 392"
-                                fill="none"
-                                xmlns="http://www.w3.org/2000/svg"
+                                SEE YOUR POSITION →
+                            </Link>
+                            <button
+                                type="button"
+                                onClick={() => setTour('open')}
+                                className={cn(
+                                    btnOutline,
+                                    ctaSize,
+                                    'hover:bg-white',
+                                )}
                             >
-                                <g className="text-[#1B1B18] opacity-100 mix-blend-darken transition-all delay-300 duration-750 dark:text-black dark:mix-blend-normal starting:opacity-0">
-                                    <mask
-                                        id="path-1-mask"
-                                        maskUnits="userSpaceOnUse"
-                                        x="-0.328613"
-                                        y="103"
-                                        width="338"
-                                        height="299"
-                                        fill="black"
-                                    >
-                                        <rect
-                                            fill="white"
-                                            x="-0.328613"
-                                            y="103"
-                                            width="338"
-                                            height="299"
-                                        />
-                                        <path d="M234.936 400.8C204.136 400.8 178.936 392.4 159.336 375.6C140.136 358.8 130.536 337 130.536 310.2H200.736C200.736 318.2 203.736 324.8 209.736 330C215.736 335.2 223.736 337.8 233.736 337.8C243.336 337.8 251.136 335 257.136 329.4C263.536 323.8 266.736 316.6 266.736 307.8C266.736 299.8 263.936 293.2 258.336 288C252.736 282.8 245.536 280.2 236.736 280.2H199.536V218.4H236.736C243.536 218.4 249.336 216 254.136 211.2C258.936 206.4 261.336 200.4 261.336 193.2C261.336 184.8 258.736 178.2 253.536 173.4C248.336 168.6 241.736 166.2 233.736 166.2C226.536 166.2 220.336 168.4 215.136 172.8C210.336 177.2 207.936 182.8 207.936 189.6H141.336C141.336 164.8 150.136 144.6 167.736 129C185.336 113 207.936 105 235.536 105C263.136 105 285.536 112.2 302.736 126.6C320.336 141 329.136 160 329.136 183.6C329.136 200.8 324.536 214.8 315.336 225.6C306.136 236 294.336 243.2 279.936 247.2C297.136 252 310.736 260.2 320.736 271.8C331.136 283.4 336.336 298 336.336 315.6C336.336 340.4 326.936 360.8 308.136 376.8C289.336 392.8 264.936 400.8 234.936 400.8Z" />
-                                        <path d="M26.8714 167.6H1.67139V105.2H94.6714V400.2H26.8714V167.6Z" />
-                                    </mask>
-                                    <path
-                                        d="M234.936 400.8C204.136 400.8 178.936 392.4 159.336 375.6C140.136 358.8 130.536 337 130.536 310.2H200.736C200.736 318.2 203.736 324.8 209.736 330C215.736 335.2 223.736 337.8 233.736 337.8C243.336 337.8 251.136 335 257.136 329.4C263.536 323.8 266.736 316.6 266.736 307.8C266.736 299.8 263.936 293.2 258.336 288C252.736 282.8 245.536 280.2 236.736 280.2H199.536V218.4H236.736C243.536 218.4 249.336 216 254.136 211.2C258.936 206.4 261.336 200.4 261.336 193.2C261.336 184.8 258.736 178.2 253.536 173.4C248.336 168.6 241.736 166.2 233.736 166.2C226.536 166.2 220.336 168.4 215.136 172.8C210.336 177.2 207.936 182.8 207.936 189.6H141.336C141.336 164.8 150.136 144.6 167.736 129C185.336 113 207.936 105 235.536 105C263.136 105 285.536 112.2 302.736 126.6C320.336 141 329.136 160 329.136 183.6C329.136 200.8 324.536 214.8 315.336 225.6C306.136 236 294.336 243.2 279.936 247.2C297.136 252 310.736 260.2 320.736 271.8C331.136 283.4 336.336 298 336.336 315.6C336.336 340.4 326.936 360.8 308.136 376.8C289.336 392.8 264.936 400.8 234.936 400.8Z"
-                                        fill="currentColor"
-                                    />
-                                    <path
-                                        d="M26.8714 167.6H1.67139V105.2H94.6714V400.2H26.8714V167.6Z"
-                                        fill="currentColor"
-                                    />
-                                    <path
-                                        d="M234.936 400.8C204.136 400.8 178.936 392.4 159.336 375.6C140.136 358.8 130.536 337 130.536 310.2H200.736C200.736 318.2 203.736 324.8 209.736 330C215.736 335.2 223.736 337.8 233.736 337.8C243.336 337.8 251.136 335 257.136 329.4C263.536 323.8 266.736 316.6 266.736 307.8C266.736 299.8 263.936 293.2 258.336 288C252.736 282.8 245.536 280.2 236.736 280.2H199.536V218.4H236.736C243.536 218.4 249.336 216 254.136 211.2C258.936 206.4 261.336 200.4 261.336 193.2C261.336 184.8 258.736 178.2 253.536 173.4C248.336 168.6 241.736 166.2 233.736 166.2C226.536 166.2 220.336 168.4 215.136 172.8C210.336 177.2 207.936 182.8 207.936 189.6H141.336C141.336 164.8 150.136 144.6 167.736 129C185.336 113 207.936 105 235.536 105C263.136 105 285.536 112.2 302.736 126.6C320.336 141 329.136 160 329.136 183.6C329.136 200.8 324.536 214.8 315.336 225.6C306.136 236 294.336 243.2 279.936 247.2C297.136 252 310.736 260.2 320.736 271.8C331.136 283.4 336.336 298 336.336 315.6C336.336 340.4 326.936 360.8 308.136 376.8C289.336 392.8 264.936 400.8 234.936 400.8Z"
-                                        stroke="var(--stroke-color)"
-                                        strokeWidth="2.4"
-                                        mask="url(#path-1-mask)"
-                                    />
-                                    <path
-                                        d="M26.8714 167.6H1.67139V105.2H94.6714V400.2H26.8714V167.6Z"
-                                        stroke="var(--stroke-color)"
-                                        strokeWidth="2.4"
-                                        mask="url(#path-1-mask)"
-                                    />
-                                </g>
-
-                                <g className="text-[#F3BEC7] opacity-100 transition-all delay-400 duration-750 dark:text-[#4B0600] starting:opacity-0 motion-safe:starting:-translate-x-[26px]">
-                                    <mask
-                                        id="path-2-mask"
-                                        maskUnits="userSpaceOnUse"
-                                        x="25.3357"
-                                        y="103"
-                                        width="338"
-                                        height="299"
-                                        fill="black"
-                                    >
-                                        <rect
-                                            fill="white"
-                                            x="25.3357"
-                                            y="103"
-                                            width="338"
-                                            height="299"
-                                        />
-                                        <path d="M260.6 400.8C229.8 400.8 204.6 392.4 185 375.6C165.8 358.8 156.2 337 156.2 310.2H226.4C226.4 318.2 229.4 324.8 235.4 330C241.4 335.2 249.4 337.8 259.4 337.8C269 337.8 276.8 335 282.8 329.4C289.2 323.8 292.4 316.6 292.4 307.8C292.4 299.8 289.6 293.2 284 288C278.4 282.8 271.2 280.2 262.4 280.2H225.2V218.4H262.4C269.2 218.4 275 216 279.8 211.2C284.6 206.4 287 200.4 287 193.2C287 184.8 284.4 178.2 279.2 173.4C274 168.6 267.4 166.2 259.4 166.2C252.2 166.2 246 168.4 240.8 172.8C236 177.2 233.6 182.8 233.6 189.6H167C167 164.8 175.8 144.6 193.4 129C211 113 233.6 105 261.2 105C288.8 105 311.2 112.2 328.4 126.6C346 141 354.8 160 354.8 183.6C354.8 200.8 350.2 214.8 341 225.6C331.8 236 320 243.2 305.6 247.2C322.8 252 336.4 260.2 346.4 271.8C356.8 283.4 362 298 362 315.6C362 340.4 352.6 360.8 333.8 376.8C315 392.8 290.6 400.8 260.6 400.8Z" />
-                                        <path d="M52.5357 167.6H27.3357V105.2H120.336V400.2H52.5357V167.6Z" />
-                                    </mask>
-                                    <path
-                                        d="M260.6 400.8C229.8 400.8 204.6 392.4 185 375.6C165.8 358.8 156.2 337 156.2 310.2H226.4C226.4 318.2 229.4 324.8 235.4 330C241.4 335.2 249.4 337.8 259.4 337.8C269 337.8 276.8 335 282.8 329.4C289.2 323.8 292.4 316.6 292.4 307.8C292.4 299.8 289.6 293.2 284 288C278.4 282.8 271.2 280.2 262.4 280.2H225.2V218.4H262.4C269.2 218.4 275 216 279.8 211.2C284.6 206.4 287 200.4 287 193.2C287 184.8 284.4 178.2 279.2 173.4C274 168.6 267.4 166.2 259.4 166.2C252.2 166.2 246 168.4 240.8 172.8C236 177.2 233.6 182.8 233.6 189.6H167C167 164.8 175.8 144.6 193.4 129C211 113 233.6 105 261.2 105C288.8 105 311.2 112.2 328.4 126.6C346 141 354.8 160 354.8 183.6C354.8 200.8 350.2 214.8 341 225.6C331.8 236 320 243.2 305.6 247.2C322.8 252 336.4 260.2 346.4 271.8C356.8 283.4 362 298 362 315.6C362 340.4 352.6 360.8 333.8 376.8C315 392.8 290.6 400.8 260.6 400.8Z"
-                                        fill="currentColor"
-                                    />
-                                    <path
-                                        d="M52.5357 167.6H27.3357V105.2H120.336V400.2H52.5357V167.6Z"
-                                        fill="currentColor"
-                                    />
-                                    <path
-                                        d="M260.6 400.8C229.8 400.8 204.6 392.4 185 375.6C165.8 358.8 156.2 337 156.2 310.2H226.4C226.4 318.2 229.4 324.8 235.4 330C241.4 335.2 249.4 337.8 259.4 337.8C269 337.8 276.8 335 282.8 329.4C289.2 323.8 292.4 316.6 292.4 307.8C292.4 299.8 289.6 293.2 284 288C278.4 282.8 271.2 280.2 262.4 280.2H225.2V218.4H262.4C269.2 218.4 275 216 279.8 211.2C284.6 206.4 287 200.4 287 193.2C287 184.8 284.4 178.2 279.2 173.4C274 168.6 267.4 166.2 259.4 166.2C252.2 166.2 246 168.4 240.8 172.8C236 177.2 233.6 182.8 233.6 189.6H167C167 164.8 175.8 144.6 193.4 129C211 113 233.6 105 261.2 105C288.8 105 311.2 112.2 328.4 126.6C346 141 354.8 160 354.8 183.6C354.8 200.8 350.2 214.8 341 225.6C331.8 236 320 243.2 305.6 247.2C322.8 252 336.4 260.2 346.4 271.8C356.8 283.4 362 298 362 315.6C362 340.4 352.6 360.8 333.8 376.8C315 392.8 290.6 400.8 260.6 400.8Z"
-                                        stroke="var(--stroke-color)"
-                                        strokeWidth="2.4"
-                                        mask="url(#path-2-mask)"
-                                    />
-                                    <path
-                                        d="M52.5357 167.6H27.3357V105.2H120.336V400.2H52.5357V167.6Z"
-                                        stroke="var(--stroke-color)"
-                                        strokeWidth="2.4"
-                                        mask="url(#path-2-mask)"
-                                    />
-                                </g>
-
-                                <g className="text-[#F8B803] opacity-100 mix-blend-color transition-all delay-400 duration-750 dark:text-[#391800] dark:mix-blend-hard-light starting:opacity-0 motion-safe:starting:-translate-x-[51px]">
-                                    <mask
-                                        id="path-3-mask"
-                                        maskUnits="userSpaceOnUse"
-                                        x="51"
-                                        y="103"
-                                        width="338"
-                                        height="299"
-                                        fill="black"
-                                    >
-                                        <rect
-                                            fill="white"
-                                            x="51"
-                                            y="103"
-                                            width="338"
-                                            height="299"
-                                        />
-                                        <path d="M286.264 400.8C255.464 400.8 230.264 392.4 210.664 375.6C191.464 358.8 181.864 337 181.864 310.2H252.064C252.064 318.2 255.064 324.8 261.064 330C267.064 335.2 275.064 337.8 285.064 337.8C294.664 337.8 302.464 335 308.464 329.4C314.864 323.8 318.064 316.6 318.064 307.8C318.064 299.8 315.264 293.2 309.664 288C304.064 282.8 296.864 280.2 288.064 280.2H250.864V218.4H288.064C294.864 218.4 300.664 216 305.464 211.2C310.264 206.4 312.664 200.4 312.664 193.2C312.664 184.8 310.064 178.2 304.864 173.4C299.664 168.6 293.064 166.2 285.064 166.2C277.864 166.2 271.664 168.4 266.464 172.8C261.664 177.2 259.264 182.8 259.264 189.6H192.664C192.664 164.8 201.464 144.6 219.064 129C236.664 113 259.264 105 286.864 105C314.464 105 336.864 112.2 354.064 126.6C371.664 141 380.464 160 380.464 183.6C380.464 200.8 375.864 214.8 366.664 225.6C357.464 236 345.664 243.2 331.264 247.2C348.464 252 362.064 260.2 372.064 271.8C382.464 283.4 387.664 298 387.664 315.6C387.664 340.4 378.264 360.8 359.464 376.8C340.664 392.8 316.264 400.8 286.264 400.8Z" />
-                                        <path d="M78.2 167.6H53V105.2H146V400.2H78.2V167.6Z" />
-                                    </mask>
-                                    <path
-                                        d="M286.264 400.8C255.464 400.8 230.264 392.4 210.664 375.6C191.464 358.8 181.864 337 181.864 310.2H252.064C252.064 318.2 255.064 324.8 261.064 330C267.064 335.2 275.064 337.8 285.064 337.8C294.664 337.8 302.464 335 308.464 329.4C314.864 323.8 318.064 316.6 318.064 307.8C318.064 299.8 315.264 293.2 309.664 288C304.064 282.8 296.864 280.2 288.064 280.2H250.864V218.4H288.064C294.864 218.4 300.664 216 305.464 211.2C310.264 206.4 312.664 200.4 312.664 193.2C312.664 184.8 310.064 178.2 304.864 173.4C299.664 168.6 293.064 166.2 285.064 166.2C277.864 166.2 271.664 168.4 266.464 172.8C261.664 177.2 259.264 182.8 259.264 189.6H192.664C192.664 164.8 201.464 144.6 219.064 129C236.664 113 259.264 105 286.864 105C314.464 105 336.864 112.2 354.064 126.6C371.664 141 380.464 160 380.464 183.6C380.464 200.8 375.864 214.8 366.664 225.6C357.464 236 345.664 243.2 331.264 247.2C348.464 252 362.064 260.2 372.064 271.8C382.464 283.4 387.664 298 387.664 315.6C387.664 340.4 378.264 360.8 359.464 376.8C340.664 392.8 316.264 400.8 286.264 400.8Z"
-                                        fill="currentColor"
-                                    />
-                                    <path
-                                        d="M78.2 167.6H53V105.2H146V400.2H78.2V167.6Z"
-                                        fill="currentColor"
-                                    />
-                                    <path
-                                        d="M286.264 400.8C255.464 400.8 230.264 392.4 210.664 375.6C191.464 358.8 181.864 337 181.864 310.2H252.064C252.064 318.2 255.064 324.8 261.064 330C267.064 335.2 275.064 337.8 285.064 337.8C294.664 337.8 302.464 335 308.464 329.4C314.864 323.8 318.064 316.6 318.064 307.8C318.064 299.8 315.264 293.2 309.664 288C304.064 282.8 296.864 280.2 288.064 280.2H250.864V218.4H288.064C294.864 218.4 300.664 216 305.464 211.2C310.264 206.4 312.664 200.4 312.664 193.2C312.664 184.8 310.064 178.2 304.864 173.4C299.664 168.6 293.064 166.2 285.064 166.2C277.864 166.2 271.664 168.4 266.464 172.8C261.664 177.2 259.264 182.8 259.264 189.6H192.664C192.664 164.8 201.464 144.6 219.064 129C236.664 113 259.264 105 286.864 105C314.464 105 336.864 112.2 354.064 126.6C371.664 141 380.464 160 380.464 183.6C380.464 200.8 375.864 214.8 366.664 225.6C357.464 236 345.664 243.2 331.264 247.2C348.464 252 362.064 260.2 372.064 271.8C382.464 283.4 387.664 298 387.664 315.6C387.664 340.4 378.264 360.8 359.464 376.8C340.664 392.8 316.264 400.8 286.264 400.8Z"
-                                        stroke="var(--stroke-color)"
-                                        strokeWidth="2.4"
-                                        mask="url(#path-3-mask)"
-                                    />
-                                    <path
-                                        d="M78.2 167.6H53V105.2H146V400.2H78.2V167.6Z"
-                                        stroke="var(--stroke-color)"
-                                        strokeWidth="2.4"
-                                        mask="url(#path-3-mask)"
-                                    />
-                                </g>
-
-                                <g className="text-[#F3BEC7] opacity-100 mix-blend-multiply transition-all delay-400 duration-750 dark:text-[#733000] dark:mix-blend-normal starting:opacity-0 motion-safe:starting:-translate-x-[78px]">
-                                    <mask
-                                        id="path-4-mask"
-                                        maskUnits="userSpaceOnUse"
-                                        x="76.6643"
-                                        y="103"
-                                        width="338"
-                                        height="299"
-                                        fill="black"
-                                    >
-                                        <rect
-                                            fill="white"
-                                            x="76.6643"
-                                            y="103"
-                                            width="338"
-                                            height="299"
-                                        />
-                                        <path d="M311.929 400.8C281.129 400.8 255.929 392.4 236.329 375.6C217.129 358.8 207.529 337 207.529 310.2H277.729C277.729 318.2 280.729 324.8 286.729 330C292.729 335.2 300.729 337.8 310.729 337.8C320.329 337.8 328.129 335 334.129 329.4C340.529 323.8 343.729 316.6 343.729 307.8C343.729 299.8 340.929 293.2 335.329 288C329.729 282.8 322.529 280.2 313.729 280.2H276.529V218.4H313.729C320.529 218.4 326.329 216 331.129 211.2C335.929 206.4 338.329 200.4 338.329 193.2C338.329 184.8 335.729 178.2 330.529 173.4C325.329 168.6 318.729 166.2 310.729 166.2C303.529 166.2 297.329 168.4 292.129 172.8C287.329 177.2 284.929 182.8 284.929 189.6H218.329C218.329 164.8 227.129 144.6 244.729 129C262.329 113 284.929 105 312.529 105C340.129 105 362.529 112.2 379.729 126.6C397.329 141 406.129 160 406.129 183.6C406.129 200.8 401.529 214.8 392.329 225.6C383.129 236 371.329 243.2 356.929 247.2C374.129 252 387.729 260.2 397.729 271.8C408.129 283.4 413.329 298 413.329 315.6C413.329 340.4 403.929 360.8 385.129 376.8C366.329 392.8 341.929 400.8 311.929 400.8Z" />
-                                        <path d="M103.864 167.6H78.6643V105.2H171.664V400.2H103.864V167.6Z" />
-                                    </mask>
-                                    <path
-                                        d="M311.929 400.8C281.129 400.8 255.929 392.4 236.329 375.6C217.129 358.8 207.529 337 207.529 310.2H277.729C277.729 318.2 280.729 324.8 286.729 330C292.729 335.2 300.729 337.8 310.729 337.8C320.329 337.8 328.129 335 334.129 329.4C340.529 323.8 343.729 316.6 343.729 307.8C343.729 299.8 340.929 293.2 335.329 288C329.729 282.8 322.529 280.2 313.729 280.2H276.529V218.4H313.729C320.529 218.4 326.329 216 331.129 211.2C335.929 206.4 338.329 200.4 338.329 193.2C338.329 184.8 335.729 178.2 330.529 173.4C325.329 168.6 318.729 166.2 310.729 166.2C303.529 166.2 297.329 168.4 292.129 172.8C287.329 177.2 284.929 182.8 284.929 189.6H218.329C218.329 164.8 227.129 144.6 244.729 129C262.329 113 284.929 105 312.529 105C340.129 105 362.529 112.2 379.729 126.6C397.329 141 406.129 160 406.129 183.6C406.129 200.8 401.529 214.8 392.329 225.6C383.129 236 371.329 243.2 356.929 247.2C374.129 252 387.729 260.2 397.729 271.8C408.129 283.4 413.329 298 413.329 315.6C413.329 340.4 403.929 360.8 385.129 376.8C366.329 392.8 341.929 400.8 311.929 400.8Z"
-                                        fill="currentColor"
-                                    />
-                                    <path
-                                        d="M103.864 167.6H78.6643V105.2H171.664V400.2H103.864V167.6Z"
-                                        fill="currentColor"
-                                    />
-                                    <path
-                                        d="M311.929 400.8C281.129 400.8 255.929 392.4 236.329 375.6C217.129 358.8 207.529 337 207.529 310.2H277.729C277.729 318.2 280.729 324.8 286.729 330C292.729 335.2 300.729 337.8 310.729 337.8C320.329 337.8 328.129 335 334.129 329.4C340.529 323.8 343.729 316.6 343.729 307.8C343.729 299.8 340.929 293.2 335.329 288C329.729 282.8 322.529 280.2 313.729 280.2H276.529V218.4H313.729C320.529 218.4 326.329 216 331.129 211.2C335.929 206.4 338.329 200.4 338.329 193.2C338.329 184.8 335.729 178.2 330.529 173.4C325.329 168.6 318.729 166.2 310.729 166.2C303.529 166.2 297.329 168.4 292.129 172.8C287.329 177.2 284.929 182.8 284.929 189.6H218.329C218.329 164.8 227.129 144.6 244.729 129C262.329 113 284.929 105 312.529 105C340.129 105 362.529 112.2 379.729 126.6C397.329 141 406.129 160 406.129 183.6C406.129 200.8 401.529 214.8 392.329 225.6C383.129 236 371.329 243.2 356.929 247.2C374.129 252 387.729 260.2 397.729 271.8C408.129 283.4 413.329 298 413.329 315.6C413.329 340.4 403.929 360.8 385.129 376.8C366.329 392.8 341.929 400.8 311.929 400.8Z"
-                                        stroke="var(--stroke-color)"
-                                        strokeWidth="2.4"
-                                        mask="url(#path-4-mask)"
-                                    />
-                                    <path
-                                        d="M103.864 167.6H78.6643V105.2H171.664V400.2H103.864V167.6Z"
-                                        stroke="var(--stroke-color)"
-                                        strokeWidth="2.4"
-                                        mask="url(#path-4-mask)"
-                                    />
-                                </g>
-
-                                <g className="text-[#F3BEC7] opacity-100 mix-blend-hard-light transition-all delay-400 duration-750 dark:text-[#4B0600] starting:opacity-0 motion-safe:starting:-translate-x-[102px]">
-                                    <mask
-                                        id="path-5-mask"
-                                        maskUnits="userSpaceOnUse"
-                                        x="102.329"
-                                        y="103"
-                                        width="338"
-                                        height="299"
-                                        fill="black"
-                                    >
-                                        <rect
-                                            fill="white"
-                                            x="102.329"
-                                            y="103"
-                                            width="338"
-                                            height="299"
-                                        />
-                                        <path d="M337.593 400.8C306.793 400.8 281.593 392.4 261.993 375.6C242.793 358.8 233.193 337 233.193 310.2H303.393C303.393 318.2 306.393 324.8 312.393 330C318.393 335.2 326.393 337.8 336.393 337.8C345.993 337.8 353.793 335 359.793 329.4C366.193 323.8 369.393 316.6 369.393 307.8C369.393 299.8 366.593 293.2 360.993 288C355.393 282.8 348.193 280.2 339.393 280.2H302.193V218.4H339.393C346.193 218.4 351.993 216 356.793 211.2C361.593 206.4 363.993 200.4 363.993 193.2C363.993 184.8 361.393 178.2 356.193 173.4C350.993 168.6 344.393 166.2 336.393 166.2C329.193 166.2 322.993 168.4 317.793 172.8C312.993 177.2 310.593 182.8 310.593 189.6H243.993C243.993 164.8 252.793 144.6 270.393 129C287.993 113 310.593 105 338.193 105C365.793 105 388.193 112.2 405.393 126.6C422.993 141 431.793 160 431.793 183.6C431.793 200.8 427.193 214.8 417.993 225.6C408.793 236 396.993 243.2 382.593 247.2C399.793 252 413.393 260.2 423.393 271.8C433.793 283.4 438.993 298 438.993 315.6C438.993 340.4 429.593 360.8 410.793 376.8C391.993 392.8 367.593 400.8 337.593 400.8Z" />
-                                        <path d="M129.529 167.6H104.329V105.2H197.329V400.2H129.529V167.6Z" />
-                                    </mask>
-                                    <path
-                                        d="M337.593 400.8C306.793 400.8 281.593 392.4 261.993 375.6C242.793 358.8 233.193 337 233.193 310.2H303.393C303.393 318.2 306.393 324.8 312.393 330C318.393 335.2 326.393 337.8 336.393 337.8C345.993 337.8 353.793 335 359.793 329.4C366.193 323.8 369.393 316.6 369.393 307.8C369.393 299.8 366.593 293.2 360.993 288C355.393 282.8 348.193 280.2 339.393 280.2H302.193V218.4H339.393C346.193 218.4 351.993 216 356.793 211.2C361.593 206.4 363.993 200.4 363.993 193.2C363.993 184.8 361.393 178.2 356.193 173.4C350.993 168.6 344.393 166.2 336.393 166.2C329.193 166.2 322.993 168.4 317.793 172.8C312.993 177.2 310.593 182.8 310.593 189.6H243.993C243.993 164.8 252.793 144.6 270.393 129C287.993 113 310.593 105 338.193 105C365.793 105 388.193 112.2 405.393 126.6C422.993 141 431.793 160 431.793 183.6C431.793 200.8 427.193 214.8 417.993 225.6C408.793 236 396.993 243.2 382.593 247.2C399.793 252 413.393 260.2 423.393 271.8C433.793 283.4 438.993 298 438.993 315.6C438.993 340.4 429.593 360.8 410.793 376.8C391.993 392.8 367.593 400.8 337.593 400.8Z"
-                                        fill="currentColor"
-                                    />
-                                    <path
-                                        d="M129.529 167.6H104.329V105.2H197.329V400.2H129.529V167.6Z"
-                                        fill="currentColor"
-                                    />
-                                    <path
-                                        d="M337.593 400.8C306.793 400.8 281.593 392.4 261.993 375.6C242.793 358.8 233.193 337 233.193 310.2H303.393C303.393 318.2 306.393 324.8 312.393 330C318.393 335.2 326.393 337.8 336.393 337.8C345.993 337.8 353.793 335 359.793 329.4C366.193 323.8 369.393 316.6 369.393 307.8C369.393 299.8 366.593 293.2 360.993 288C355.393 282.8 348.193 280.2 339.393 280.2H302.193V218.4H339.393C346.193 218.4 351.993 216 356.793 211.2C361.593 206.4 363.993 200.4 363.993 193.2C363.993 184.8 361.393 178.2 356.193 173.4C350.993 168.6 344.393 166.2 336.393 166.2C329.193 166.2 322.993 168.4 317.793 172.8C312.993 177.2 310.593 182.8 310.593 189.6H243.993C243.993 164.8 252.793 144.6 270.393 129C287.993 113 310.593 105 338.193 105C365.793 105 388.193 112.2 405.393 126.6C422.993 141 431.793 160 431.793 183.6C431.793 200.8 427.193 214.8 417.993 225.6C408.793 236 396.993 243.2 382.593 247.2C399.793 252 413.393 260.2 423.393 271.8C433.793 283.4 438.993 298 438.993 315.6C438.993 340.4 429.593 360.8 410.793 376.8C391.993 392.8 367.593 400.8 337.593 400.8Z"
-                                        stroke="var(--stroke-color)"
-                                        strokeWidth="2.4"
-                                        mask="url(#path-5-mask)"
-                                    />
-                                    <path
-                                        d="M129.529 167.6H104.329V105.2H197.329V400.2H129.529V167.6Z"
-                                        stroke="var(--stroke-color)"
-                                        strokeWidth="2.4"
-                                        mask="url(#path-5-mask)"
-                                    />
-                                </g>
-                            </svg>
-                            <div className="absolute inset-0 rounded-t-lg shadow-[inset_0px_0px_0px_1px_rgba(26,26,0,0.16)] lg:rounded-t-none lg:rounded-r-lg dark:shadow-[inset_0px_0px_0px_1px_#fffaed2d]"></div>
+                                2-MIN TOUR
+                            </button>
                         </div>
-                    </main>
+                        <div className="mt-9 flex animate-rise-in gap-8.5 font-plex-mono text-[11.5px] text-stone [animation-delay:.28s]">
+                            {heroStats.map((stat) => (
+                                <span key={stat.label}>
+                                    <b className="text-[19px] text-ink">
+                                        {stat.value}
+                                    </b>
+                                    <br />
+                                    {stat.label}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                    <PositionCard />
+                </section>
+
+                {tour !== 'closed' && (
+                    <TourModal
+                        closing={tour === 'closing'}
+                        onClose={closeTour}
+                    />
+                )}
+
+                <div className="flex items-center gap-10 overflow-hidden border-t-2 border-ink bg-ink px-14 py-3.5 text-[11.5px] text-paper">
+                    <span className="flex-none font-bold text-ash">
+                        RUNNING ON BASELINE
+                    </span>
+                    {customers.map((customer) => (
+                        <span
+                            key={customer}
+                            className="font-display font-bold opacity-70 transition-opacity duration-200 hover:opacity-100"
+                        >
+                            {customer}
+                        </span>
+                    ))}
+                    <span className="ml-auto flex-none font-plex-mono text-ash">
+                        120+ DELIVERY TEAMS
+                    </span>
                 </div>
-                <div className="hidden h-14.5 lg:block"></div>
+
+                <section
+                    id="position"
+                    className="mx-auto max-w-[1200px] px-14 pt-19 pb-7.5"
+                >
+                    <div className={cn(kicker, 'text-rust')}>
+                        01 — THE PROBLEM
+                    </div>
+                    <Reveal
+                        className={cn(
+                            sectionTitle,
+                            'max-w-[700px] leading-[1.1]',
+                        )}
+                    >
+                        Your Jira knows what's happening.
+                        <br />
+                        Your contract doesn't.
+                    </Reveal>
+                    <div className="mt-9 grid grid-cols-3 border-t-2 border-ink">
+                        {problems.map((problem) => (
+                            <Reveal
+                                key={problem.title}
+                                delay={problem.delay}
+                                className={problem.cellClass}
+                            >
+                                <div
+                                    className={cn(
+                                        'font-plex-mono text-[26px] font-semibold',
+                                        problem.statColor,
+                                    )}
+                                >
+                                    {problem.stat}
+                                </div>
+                                <div className="mt-2 text-[15px] font-bold">
+                                    {problem.title}
+                                </div>
+                                <div className="mt-1.5 text-[13px] leading-[1.6] text-pretty text-stone">
+                                    {problem.body}
+                                </div>
+                            </Reveal>
+                        ))}
+                    </div>
+                </section>
+
+                <section
+                    id="how"
+                    className="mx-auto max-w-[1200px] px-14 py-15"
+                >
+                    <div className={cn(kicker, 'text-moss')}>
+                        02 — THE MOVES
+                    </div>
+                    <Reveal className={cn(sectionTitle, 'leading-[1.1]')}>
+                        Three moves, every morning.
+                    </Reveal>
+                    <div className="mt-9 grid gap-[22px]">
+                        <Reveal>
+                            <div
+                                className={cn(
+                                    'flex items-stretch gap-9 border-2 border-ink bg-white',
+                                    lift,
+                                )}
+                            >
+                                <div className="flex-1 py-7 pl-8">
+                                    <div className="font-display text-[20px] font-bold">
+                                        <span className={highlight}>
+                                            CATCH SCOPE CREEP
+                                        </span>{' '}
+                                        before it's free work
+                                    </div>
+                                    <div className="mt-2.5 max-w-[400px] text-[13.5px] leading-[1.65] text-pretty text-stone">
+                                        Every Jira and Linear issue is matched
+                                        against your approved scope. Anything
+                                        unlinked shows up priced in euros — not
+                                        story points — with four ways out:
+                                        in-scope, change request, operational,
+                                        dismiss. Each classification is on the
+                                        record.
+                                    </div>
+                                    <div className="mt-3 font-plex-mono text-[11px] text-stone">
+                                        WORKS WITH JIRA · LINEAR · STANDALONE
+                                    </div>
+                                </div>
+                                <div className="grid w-[360px] flex-none content-center gap-1.5 border-l-2 border-ink bg-paper p-5">
+                                    <div className="flex items-baseline gap-2.5 border-[1.5px] border-ink bg-white px-3.5 py-2.5 text-[12px]">
+                                        <span className="font-plex-mono font-semibold text-rust">
+                                            CREEP
+                                        </span>
+                                        <b>MER-214 Excel export</b>
+                                        <span className="ml-auto font-plex-mono">
+                                            €4,700
+                                        </span>
+                                    </div>
+                                    <div className="flex items-baseline gap-2.5 border-[1.5px] border-ink bg-white px-3.5 py-2.5 text-[12px]">
+                                        <span className="font-plex-mono font-semibold text-rust">
+                                            CREEP
+                                        </span>
+                                        <b>MER-219 depot filter</b>
+                                        <span className="ml-auto font-plex-mono">
+                                            €2,000
+                                        </span>
+                                    </div>
+                                    <div className="mt-1 flex gap-1.5 text-[10.5px] font-bold">
+                                        <span className="border-[1.5px] border-ink bg-white px-2 py-[3px]">
+                                            IN-SCOPE
+                                        </span>
+                                        <span className="bg-ink px-2 py-[3px] text-white">
+                                            CHANGE →
+                                        </span>
+                                        <span className="border-[1.5px] border-ink bg-white px-2 py-[3px]">
+                                            OPS
+                                        </span>
+                                        <span className="border-[1.5px] border-ink bg-white px-2 py-[3px]">
+                                            DISMISS
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </Reveal>
+                        <Reveal>
+                            <div
+                                className={cn(
+                                    'flex items-stretch gap-9 border-2 border-ink bg-white',
+                                    lift,
+                                )}
+                            >
+                                <div className="grid w-[360px] flex-none content-center gap-2 border-r-2 border-ink bg-paper p-5">
+                                    <div className="border-[1.5px] border-ink bg-white px-3.5 py-3 text-[12px]">
+                                        <div className="flex items-baseline gap-2">
+                                            <b>CR-07 Multi-depot</b>
+                                            <span className="ml-auto font-plex-mono">
+                                                +€18,400
+                                            </span>
+                                        </div>
+                                        <div className="mt-[3px] text-[11px] text-stone">
+                                            respond by Wed 5 Aug · trade-offs:
+                                            swap / defer
+                                        </div>
+                                        <div className="mt-2 flex gap-1.5 text-[10.5px] font-bold">
+                                            <span className="bg-moss px-2.5 py-1 text-white">
+                                                APPROVE
+                                            </span>
+                                            <span className="border-[1.5px] border-rust px-2.5 py-1 text-rust">
+                                                REJECT
+                                            </span>
+                                            <span className="border-[1.5px] border-ink px-2.5 py-1">
+                                                CLARIFY
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="font-plex-mono text-[10.5px] text-moss">
+                                        ✓ RESPONSE STORED IMMUTABLY · BASELINE
+                                        v4 CREATED
+                                    </div>
+                                </div>
+                                <div className="flex-1 py-7 pr-8">
+                                    <div className="font-display text-[20px] font-bold">
+                                        <span className={highlight}>
+                                            GET CHANGES SIGNED
+                                        </span>{' '}
+                                        before work starts
+                                    </div>
+                                    <div className="mt-2.5 max-w-[400px] text-[13.5px] leading-[1.65] text-pretty text-stone">
+                                        Change orders carry price, timeline
+                                        impact, trade-off alternatives and a
+                                        response deadline. Your client approves
+                                        in their own portal — one click,
+                                        identity verified, immutable. Approval
+                                        creates a new baseline version
+                                        automatically.
+                                    </div>
+                                    <div className="mt-3 font-plex-mono text-[11px] text-stone">
+                                        NO WORK BEFORE APPROVAL — BREACHES GET
+                                        FLAGGED
+                                    </div>
+                                </div>
+                            </div>
+                        </Reveal>
+                        <Reveal>
+                            <div
+                                className={cn(
+                                    'flex items-stretch gap-9 border-2 border-ink bg-white',
+                                    lift,
+                                )}
+                            >
+                                <div className="flex-1 py-7 pl-8">
+                                    <div className="font-display text-[20px] font-bold">
+                                        <span className={highlight}>
+                                            PROVE DELAYS
+                                        </span>{' '}
+                                        while they happen
+                                    </div>
+                                    <div className="mt-2.5 max-w-[400px] text-[13.5px] leading-[1.65] text-pretty text-stone">
+                                        Client-owed dependencies have dates and
+                                        owners. When one slips, the milestone
+                                        impact is computed day-for-day and the
+                                        attribution is recorded — acknowledged
+                                        by the client at the time, not argued
+                                        about at the end.
+                                    </div>
+                                    <div className="mt-3 font-plex-mono text-[11px] text-stone">
+                                        EVERY REPORT LINKS TO ITS EVIDENCE
+                                    </div>
+                                </div>
+                                <div className="grid w-[360px] flex-none content-center border-l-2 border-ink bg-paper p-5 font-plex-mono text-[11.5px]">
+                                    <div className="flex border-b border-sand-400 py-[7px]">
+                                        <span>DEP-3 test data</span>
+                                        <span className="ml-auto text-rust">
+                                            11d LATE
+                                        </span>
+                                    </div>
+                                    <div className="flex border-b border-sand-400 py-[7px]">
+                                        <span>→ M3 forecast</span>
+                                        <span className="ml-auto">
+                                            12 SEP → 26 SEP
+                                        </span>
+                                    </div>
+                                    <div className="flex border-b border-sand-400 py-[7px]">
+                                        <span>→ delay owner</span>
+                                        <span className="ml-auto font-semibold">
+                                            CUSTOMER
+                                        </span>
+                                    </div>
+                                    <div className="flex py-[7px]">
+                                        <span>→ recorded</span>
+                                        <span className="ml-auto text-moss">
+                                            D-021 ✓ ACK'D
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </Reveal>
+                    </div>
+                </section>
+
+                <section className="bg-ink px-14 py-16 text-paper">
+                    <div className="mx-auto max-w-[1200px]">
+                        <div className={cn(kicker, 'text-sun')}>
+                            03 — THE OTHER SIDE
+                        </div>
+                        <div className="mt-2.5 flex items-center gap-14">
+                            <Reveal className="flex-1">
+                                <div className="font-display text-[38px] leading-[1.1] font-bold tracking-[-.02em]">
+                                    Your client sees the same numbers.
+                                    <br />
+                                    <span className="text-ash">
+                                        No discussions.
+                                    </span>
+                                </div>
+                                <div className="mt-4 max-w-[440px] text-[14.5px] leading-[1.65] text-pretty text-fog">
+                                    The client portal shows commitments,
+                                    milestones, decisions and their own overdue
+                                    actions — never your margin. When both sides
+                                    watch the same ledger all along, the final
+                                    invoice is a formality, not a fight.
+                                </div>
+                                <div className="mt-5.5 flex gap-6.5 text-[12.5px] text-fog">
+                                    <span>✓ approvals in one click</span>
+                                    <span>✓ evidence attached</span>
+                                    <span>✓ margins never exposed</span>
+                                </div>
+                            </Reveal>
+                            <Reveal
+                                delay={0.15}
+                                className="w-[380px] flex-none border-2 border-paper bg-paper px-6 py-5.5 text-ink"
+                            >
+                                <div className="flex items-baseline gap-2">
+                                    <b className="text-[14px]">
+                                        Your project with Northbound
+                                    </b>
+                                    <span className="ml-auto font-plex-mono text-[10px] text-stone">
+                                        CLIENT VIEW
+                                    </span>
+                                </div>
+                                <div className="mt-3 h-2 bg-sand-300">
+                                    <div className="h-full w-[40%] bg-moss" />
+                                </div>
+                                <div className="mt-[5px] font-plex-mono text-[11px] text-stone">
+                                    2/5 MILESTONES ACCEPTED · €76,100 INVOICED
+                                </div>
+                                <div className="mt-3.5 border-[1.5px] border-rust bg-white px-3.5 py-[11px] text-[12px]">
+                                    <b className="text-rust">
+                                        Your actions are holding the project:
+                                    </b>
+                                    <div className="mt-1.5 grid gap-1">
+                                        <span>
+                                            1. Provide carrier test data —{' '}
+                                            <b>11 days overdue</b>
+                                        </span>
+                                        <span>
+                                            2. Decide CR-07 (€18,400) — by
+                                            Wednesday
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="mt-2.5 text-[11px] text-stone">
+                                    No tickets. No boards. No margins. Just what
+                                    was agreed, what changed, and what's owed.
+                                </div>
+                            </Reveal>
+                        </div>
+                    </div>
+                </section>
+
+                <section
+                    id="toolkit"
+                    className="mx-auto max-w-[1200px] px-14 pt-19 pb-7.5"
+                >
+                    <div className={cn(kicker, 'text-rust')}>
+                        04 — THE RECORD
+                    </div>
+                    <Reveal className={cn(sectionTitle, 'leading-[1.1]')}>
+                        Everything on the record.
+                    </Reveal>
+                    <div className="mt-9 grid grid-cols-4 gap-3">
+                        <Reveal className="col-span-2">
+                            <div
+                                className={cn(
+                                    'h-full border-2 border-ink bg-white px-6.5 py-6',
+                                    lift,
+                                )}
+                            >
+                                <div className={cardLabel}>
+                                    IMMUTABLE BASELINES
+                                </div>
+                                <div className={cardTitle}>
+                                    Every approval mints a{' '}
+                                    <span className={highlight}>
+                                        new version
+                                    </span>
+                                </div>
+                                <div className="mt-2 text-[13px] leading-[1.6] text-pretty text-stone">
+                                    Scope is versioned like code. Nothing edited
+                                    in place, nothing lost — every euro traces
+                                    back to the version that authorised it.
+                                </div>
+                                <div className="mt-4 flex items-center gap-2 font-plex-mono text-[11px]">
+                                    <span className="border-[1.5px] border-ink bg-paper px-2.5 py-[5px]">
+                                        v1 · €230.6k
+                                    </span>
+                                    <span>→</span>
+                                    <span className="border-[1.5px] border-ink bg-paper px-2.5 py-[5px]">
+                                        v2 · €238.1k
+                                    </span>
+                                    <span>→</span>
+                                    <span className="border-[1.5px] border-ink bg-paper px-2.5 py-[5px]">
+                                        v3 · €249.0k
+                                    </span>
+                                    <span>→</span>
+                                    <span className="bg-ink px-2.5 py-[5px] text-paper">
+                                        v4 · DRAFT
+                                    </span>
+                                </div>
+                            </div>
+                        </Reveal>
+                        <Reveal delay={0.08} className="col-span-2">
+                            <div
+                                className={cn(
+                                    'h-full border-2 border-ink bg-white px-6.5 py-6',
+                                    lift,
+                                )}
+                            >
+                                <div className={cardLabel}>PORTFOLIO VIEW</div>
+                                <div className={cardTitle}>
+                                    Every engagement's position, one screen
+                                </div>
+                                <div className="mt-4 grid gap-[7px] font-plex-mono text-[11.5px]">
+                                    {[
+                                        {
+                                            name: 'NORTHBOUND',
+                                            width: 'w-[72%]',
+                                            delta: '+2.1pt',
+                                            deltaColor: 'text-moss',
+                                        },
+                                        {
+                                            name: 'HELIX',
+                                            width: 'w-[44%]',
+                                            delta: '+0.8pt',
+                                            deltaColor: 'text-moss',
+                                        },
+                                        {
+                                            name: 'PORTA',
+                                            width: 'w-[31%]',
+                                            delta: '−1.4pt',
+                                            deltaColor: 'text-rust',
+                                        },
+                                    ].map((engagement) => (
+                                        <div
+                                            key={engagement.name}
+                                            className="flex items-center gap-2.5"
+                                        >
+                                            <span className="w-[110px] flex-none">
+                                                {engagement.name}
+                                            </span>
+                                            <div className="h-3 flex-1 bg-sand-200">
+                                                <div
+                                                    className={cn(
+                                                        'h-full bg-ink',
+                                                        engagement.width,
+                                                    )}
+                                                />
+                                            </div>
+                                            <b
+                                                className={cn(
+                                                    'w-[52px] text-right',
+                                                    engagement.deltaColor,
+                                                )}
+                                            >
+                                                {engagement.delta}
+                                            </b>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </Reveal>
+                        <Reveal>
+                            <div
+                                className={cn(
+                                    'h-full border-2 border-ink bg-white px-6.5 py-6',
+                                    lift,
+                                )}
+                            >
+                                <div className={cardLabel}>DECISION LEDGER</div>
+                                <div className={cardTitle}>
+                                    Who decided, when, on what evidence
+                                </div>
+                                <div className="mt-3.5 grid gap-1.5 font-plex-mono text-[11px] text-soot">
+                                    <span>
+                                        D-019 · CR-06 APPROVED ·{' '}
+                                        <span className="text-moss">✓</span>
+                                    </span>
+                                    <span>
+                                        D-020 · CREEP → IN-SCOPE ·{' '}
+                                        <span className="text-moss">✓</span>
+                                    </span>
+                                    <span>
+                                        D-021 · DELAY ATTRIBUTED ·{' '}
+                                        <span className="text-moss">✓</span>
+                                    </span>
+                                </div>
+                            </div>
+                        </Reveal>
+                        <Reveal delay={0.06}>
+                            <div
+                                className={cn(
+                                    'h-full border-2 border-ink bg-white px-6.5 py-6',
+                                    lift,
+                                )}
+                            >
+                                <div className={cardLabel}>ACCEPTANCE</div>
+                                <div className={cardTitle}>
+                                    Accepted means signed, not assumed
+                                </div>
+                                <div className="mt-3.5 grid gap-1.5 text-[12px]">
+                                    <div className="flex items-baseline gap-2">
+                                        <b>API integration</b>
+                                        <span className="ml-auto font-plex-mono text-[10.5px] text-moss">
+                                            ✓ ACCEPTED
+                                        </span>
+                                    </div>
+                                    <div className="flex items-baseline gap-2">
+                                        <b>Dispatch UI</b>
+                                        <span className="ml-auto font-plex-mono text-[10.5px] text-ochre">
+                                            IN REVIEW
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </Reveal>
+                        <Reveal delay={0.12} className="col-span-2">
+                            <div
+                                className={cn(
+                                    'h-full border-2 border-ink bg-ink px-6.5 py-6 text-paper',
+                                    'transition-[translate,box-shadow] duration-200 hover:-translate-x-[3px] hover:-translate-y-[3px] hover:shadow-[6px_6px_0_var(--color-rust)]',
+                                )}
+                            >
+                                <div className="font-plex-mono text-[11px] font-semibold text-ash">
+                                    WEEKLY REPORTS
+                                </div>
+                                <div className={cardTitle}>
+                                    Monday morning,{' '}
+                                    <span className={cn(highlight, 'text-ink')}>
+                                        evidence attached
+                                    </span>
+                                </div>
+                                <div className="mt-2 text-[13px] leading-[1.6] text-pretty text-fog">
+                                    One page: what moved, what changed, what's
+                                    owed and by whom. Every line links to the
+                                    record behind it — no narrative, no spin.
+                                </div>
+                                <div className="mt-3 font-plex-mono text-[10.5px] text-ash">
+                                    WK 32 REPORT · 14 LINKED RECORDS · SENT TO 6
+                                    STAKEHOLDERS
+                                </div>
+                            </div>
+                        </Reveal>
+                        <Reveal className="col-span-2">
+                            <div
+                                className={cn(
+                                    'h-full border-2 border-ink bg-white px-6.5 py-6',
+                                    lift,
+                                )}
+                            >
+                                <div className={cardLabel}>
+                                    DEPENDENCY REGISTER
+                                </div>
+                                <div className={cardTitle}>
+                                    Client-owed items with dates and owners
+                                </div>
+                                <div className="mt-3.5 grid font-plex-mono text-[11.5px]">
+                                    <div className="flex border-b border-sand-300 py-1.5">
+                                        <span>DEP-3 carrier test data</span>
+                                        <span className="ml-auto text-rust">
+                                            11d LATE
+                                        </span>
+                                    </div>
+                                    <div className="flex py-1.5">
+                                        <span>DEP-5 depot access list</span>
+                                        <span className="ml-auto text-moss">
+                                            ON TIME
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </Reveal>
+                        <Reveal delay={0.08} className="col-span-2">
+                            <div
+                                className={cn(
+                                    'h-full border-2 border-ink bg-white px-6.5 py-6',
+                                    lift,
+                                )}
+                            >
+                                <div className={cardLabel}>INTEGRATIONS</div>
+                                <div className={cardTitle}>
+                                    Meets the work where it lives
+                                </div>
+                                <div className="mt-2 text-[13px] leading-[1.6] text-pretty text-stone">
+                                    Two-way sync with the delivery tool — no
+                                    double entry, no new board to maintain.
+                                </div>
+                                <div className="mt-3.5 flex gap-2 font-plex-mono text-[10.5px] font-semibold">
+                                    <span className="border-[1.5px] border-ink bg-paper px-2.5 py-1">
+                                        JIRA
+                                    </span>
+                                    <span className="border-[1.5px] border-ink bg-paper px-2.5 py-1">
+                                        LINEAR
+                                    </span>
+                                    <span className="border-[1.5px] border-ink bg-paper px-2.5 py-1">
+                                        STANDALONE
+                                    </span>
+                                </div>
+                            </div>
+                        </Reveal>
+                    </div>
+                </section>
+
+                <section
+                    id="pricing"
+                    className="mx-auto max-w-[1200px] px-14 py-19"
+                >
+                    <div className={cn(kicker, 'text-moss')}>05 — PRICING</div>
+                    <Reveal className={sectionTitle}>
+                        One recovered change request pays for the year.
+                    </Reveal>
+                    <Reveal
+                        delay={0.1}
+                        className="mt-9 grid grid-cols-3 border-2 border-ink bg-white"
+                    >
+                        <div className="border-r border-sand-400 px-8 py-7.5">
+                            <div className={cardLabel}>SOLO</div>
+                            <div className="mt-2 font-display text-[34px] font-bold">
+                                €0
+                            </div>
+                            <div className="text-[12px] text-stone">
+                                1 active engagement
+                            </div>
+                            <div className="mt-4.5 grid gap-[7px] text-[12.5px] text-soot">
+                                <span>✓ Scope-creep radar</span>
+                                <span>✓ Change requests & approvals</span>
+                                <span>✓ Client portal</span>
+                                <span>✓ Jira or Linear</span>
+                            </div>
+                            <Link
+                                href={login()}
+                                className={cn(
+                                    btnOutline,
+                                    'mt-5 block py-2.5 text-[12.5px] hover:bg-paper',
+                                )}
+                            >
+                                START FREE
+                            </Link>
+                        </div>
+                        <div className="relative border-r border-sand-400 bg-ink px-8 py-7.5 text-paper">
+                            <div className="absolute -top-0.5 right-4 bg-sun px-2 py-1 font-plex-mono text-[10px] font-semibold text-ink">
+                                MOST AGENCIES
+                            </div>
+                            <div className="font-plex-mono text-[11px] font-semibold text-ash">
+                                STUDIO
+                            </div>
+                            <div className="mt-2 font-display text-[34px] font-bold">
+                                €89
+                                <span className="text-[14px] text-ash">
+                                    /engagement/mo
+                                </span>
+                            </div>
+                            <div className="text-[12px] text-ash">
+                                up to 25 active engagements
+                            </div>
+                            <div className="mt-4.5 grid gap-[7px] text-[12.5px] text-bone">
+                                <span>✓ Everything in Solo</span>
+                                <span>
+                                    ✓ Delay attribution & impact letters
+                                </span>
+                                <span>✓ Weekly evidence-backed reports</span>
+                                <span>✓ Decision & audit ledger</span>
+                                <span>✓ Portfolio margin view</span>
+                            </div>
+                            <Link
+                                href={login()}
+                                className={cn(
+                                    btn,
+                                    'mt-5 block bg-sun py-2.5 text-[12.5px] text-ink hover:bg-white',
+                                )}
+                            >
+                                GET STUDIO →
+                            </Link>
+                        </div>
+                        <div className="px-8 py-7.5">
+                            <div className={cardLabel}>FIRM</div>
+                            <div className="mt-2 font-display text-[34px] font-bold">
+                                Custom
+                            </div>
+                            <div className="text-[12px] text-stone">
+                                unlimited · SSO · DPA
+                            </div>
+                            <div className="mt-4.5 grid gap-[7px] text-[12.5px] text-soot">
+                                <span>✓ Everything in Studio</span>
+                                <span>✓ SSO / SAML & audit export</span>
+                                <span>✓ Custom approval chains</span>
+                                <span>✓ Onboarding with your templates</span>
+                            </div>
+                            <a
+                                href="mailto:hello@baseline.pm"
+                                className={cn(
+                                    btnOutline,
+                                    'mt-5 block py-2.5 text-[12.5px] hover:bg-paper',
+                                )}
+                            >
+                                TALK TO US
+                            </a>
+                        </div>
+                    </Reveal>
+                    <div className="mt-3 font-plex-mono text-[11.5px] text-stone">
+                        CLIENT USERS ARE ALWAYS FREE — APPROVERS, VIEWERS,
+                        SPONSORS. NO SEAT MATH.
+                    </div>
+                </section>
+
+                <section
+                    id="manifesto"
+                    className="border-t-2 border-ink bg-white px-14 py-19"
+                >
+                    <Reveal className="mx-auto max-w-[760px]">
+                        <div className={cn(kicker, 'text-rust')}>
+                            06 — MANIFESTO
+                        </div>
+                        <div className="mt-3.5 font-display text-[30px] leading-[1.25] font-bold tracking-[-.02em]">
+                            Scope creep isn't a client problem.
+                            <br />
+                            It's a{' '}
+                            <span className="bg-sun px-1.5">
+                                record-keeping
+                            </span>{' '}
+                            problem.
+                        </div>
+                        <div className="mt-5 text-[15px] leading-[1.75] text-pretty text-soot">
+                            Clients don't set out to get free work. Teams don't
+                            set out to give it away. It happens because the
+                            agreement lives in a PDF nobody opens, while the
+                            work lives in a tool the contract has never heard
+                            of. Every undocumented favour, every "quick
+                            addition", every slipped dependency is a small
+                            silent renegotiation — always in the same direction.
+                        </div>
+                        <div className="mt-3.5 text-[15px] leading-[1.75] text-pretty text-soot">
+                            Baseline's bet: if keeping the record is effortless,
+                            the record keeps you. Decide who pays for every hour
+                            — deliberately, visibly, at the moment it happens —
+                            and fixed price becomes what it was supposed to be:
+                            a fair deal for both sides.
+                        </div>
+                        <div className="mt-7.5 flex gap-3">
+                            <Link
+                                href={login()}
+                                className={cn(btnDark, ctaSize)}
+                            >
+                                SEE YOUR POSITION →
+                            </Link>
+                            <span
+                                className={cn(
+                                    btnOutline,
+                                    ctaSize,
+                                    'hover:bg-paper',
+                                )}
+                            >
+                                READ THE FULL MANIFESTO
+                            </span>
+                        </div>
+                    </Reveal>
+                </section>
+
+                <footer className="flex items-start gap-10 border-t-2 border-ink bg-paper px-14 py-9 text-[12px] text-stone">
+                    <div>
+                        <div className="font-display text-[15px] font-bold text-ink">
+                            BASELINE
+                        </div>
+                        <div className="mt-1.5 max-w-[220px] leading-[1.5]">
+                            Delivery governance for agencies running fixed-price
+                            work.
+                        </div>
+                    </div>
+                    <div className="grid gap-1.5">
+                        <b className="text-ink">Product</b>
+                        <span>Scope-creep radar</span>
+                        <span>Change control</span>
+                        <span>Client portal</span>
+                        <span>Integrations</span>
+                    </div>
+                    <div className="grid gap-1.5">
+                        <b className="text-ink">Company</b>
+                        <span>Manifesto</span>
+                        <span>Pricing</span>
+                        <span>Security</span>
+                        <span>Contact</span>
+                    </div>
+                    <div className="ml-auto font-plex-mono text-[11px]">
+                        © 2026 BASELINE · GDPR · EU-HOSTED
+                    </div>
+                </footer>
             </div>
         </>
     );

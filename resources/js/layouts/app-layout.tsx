@@ -1,16 +1,19 @@
-import AppLayoutTemplate from '@/layouts/app/app-sidebar-layout';
+import type { ReactNode } from 'react';
+import PositionLayout from '@/layouts/app/position-layout';
 import type { BreadcrumbItem } from '@/types';
 
 export default function AppLayout({
     breadcrumbs = [],
+    rail,
     children,
 }: {
     breadcrumbs?: BreadcrumbItem[];
-    children: React.ReactNode;
+    rail?: ReactNode;
+    children: ReactNode;
 }) {
     return (
-        <AppLayoutTemplate breadcrumbs={breadcrumbs}>
+        <PositionLayout breadcrumbs={breadcrumbs} rail={rail}>
             {children}
-        </AppLayoutTemplate>
+        </PositionLayout>
     );
 }

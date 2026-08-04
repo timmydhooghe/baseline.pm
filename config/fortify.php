@@ -161,7 +161,8 @@ return [
     */
 
     'features' => [
-        Features::registration(),
+        // Public registration is intentionally disabled: members join through
+        // an owner-invitation flow (WEBAPP-16).
         Features::resetPasswords(),
         Features::emailVerification(),
         Features::twoFactorAuthentication([

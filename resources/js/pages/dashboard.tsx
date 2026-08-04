@@ -1,25 +1,51 @@
 import { Head } from '@inertiajs/react';
-import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import { dashboard } from '@/routes';
+
+const stats = [
+    { label: 'Active engagements', value: '0' },
+    { label: 'Open change requests', value: '0' },
+    { label: 'Burn weeks logged', value: '0' },
+];
 
 export default function Dashboard() {
     return (
         <>
-            <Head title="Dashboard" />
-            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-                <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+            <Head title="Overview" />
+            <div className="flex flex-col gap-6">
+                <div>
+                    <div className="font-plex-mono text-[12px] font-semibold text-rust uppercase">
+                        Overview
                     </div>
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
+                    <h1 className="mt-1 font-display text-[28px] font-bold tracking-[-0.02em]">
+                        Control room
+                    </h1>
                 </div>
-                <div className="relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border border-sidebar-border/70 md:min-h-min dark:border-sidebar-border">
-                    <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+
+                <div className="grid gap-4 md:grid-cols-3">
+                    {stats.map((stat) => (
+                        <div
+                            key={stat.label}
+                            className="border-[1.5px] border-ink p-4 dark:border-paper"
+                        >
+                            <div className="font-plex-mono text-[11px] font-semibold text-stone uppercase dark:text-fog">
+                                {stat.label}
+                            </div>
+                            <div className="mt-2 font-plex-mono text-[32px] font-semibold">
+                                {stat.value}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="border-[1.5px] border-ink p-10 text-center dark:border-paper">
+                    <div className="font-plex-mono text-[11px] font-semibold text-stone uppercase dark:text-fog">
+                        Nothing to report yet
+                    </div>
+                    <p className="mx-auto mt-2 max-w-md text-[14px] text-stone dark:text-fog">
+                        Once engagements, baselines and burn weeks are tracked,
+                        this overview shows the commercial position across your
+                        portfolio.
+                    </p>
                 </div>
             </div>
         </>
@@ -29,7 +55,7 @@ export default function Dashboard() {
 Dashboard.layout = {
     breadcrumbs: [
         {
-            title: 'Dashboard',
+            title: 'Overview',
             href: dashboard(),
         },
     ],

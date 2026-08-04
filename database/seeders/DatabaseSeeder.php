@@ -2,24 +2,30 @@
 
 namespace Database\Seeders;
 
+use App\Enums\UserRole;
+use App\Models\Organization;
 use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     /**
-     * Seed the application's database.
+     * Seed the application's database: one organization with one user per role.
+     *
+     * Every user logs in with the password "password", e.g. owner@baseline.test.
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        $organization = Organization::factory()->create(['name' => 'Baseline']);
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        foreach (UserRole::cases() as $role) {
+            User::factory()
+                ->for($organization)
+                ->role($role)
+                ->create([
+                    'name' => $role->label(),
+                    'email' => "{$role->value}@baseline.test",
+                ]);
+        }
     }
 }

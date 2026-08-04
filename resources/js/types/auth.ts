@@ -1,5 +1,14 @@
+export type UserRole =
+    | 'owner'
+    | 'delivery_manager'
+    | 'commercial_manager'
+    | 'member'
+    | 'portfolio_viewer';
+
 export type User = {
-    id: number;
+    id: string;
+    organization_id: string;
+    role: UserRole;
     name: string;
     email: string;
     avatar?: string;
@@ -8,6 +17,11 @@ export type User = {
     created_at: string;
     updated_at: string;
     [key: string]: unknown;
+};
+
+export type Organization = {
+    id: string;
+    name: string;
 };
 
 export type Auth = {

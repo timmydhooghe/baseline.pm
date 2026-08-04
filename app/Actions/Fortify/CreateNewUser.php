@@ -4,7 +4,10 @@ namespace App\Actions\Fortify;
 
 use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
+use App\Enums\UserRole;
+use App\Models\Organization;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Fortify\Contracts\CreatesNewUsers;
 
@@ -13,7 +16,10 @@ class CreateNewUser implements CreatesNewUsers
     use PasswordValidationRules, ProfileValidationRules;
 
     /**
-     * Validate and create a newly registered user.
+     * Validate and create a newly registered user as the owner of a fresh organization.
+     *
+     * Public registration is disabled in config/fortify.php; this action remains
+     * wired for the owner-invitation flow (WEBAPP-16) to build on.
      *
      * @param  array<string, string>  $input
      */
@@ -24,10 +30,20 @@ class CreateNewUser implements CreatesNewUsers
             'password' => $this->passwordRules(),
         ])->validate();
 
-        return User::create([
-            'name' => $input['name'],
-            'email' => $input['email'],
-            'password' => $input['password'],
-        ]);
+        return DB::transaction(function () use ($input): User {
+            $organization = Organization::create(['name' => $input['name']]);
+
+            $user = new User([
+                'name' => $input['name'],
+                'email' => $input['email'],
+                'password' => $input['password'],
+            ]);
+
+            $user->organization()->associate($organization);
+            $user->role = UserRole::Owner;
+            $user->save();
+
+            return $user;
+        });
     }
 }
