@@ -9,15 +9,27 @@ import {
 import { UserMenuContent } from '@/components/user-menu-content';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
+import { index as customers } from '@/routes/customers';
 import { index as engagements } from '@/routes/engagements';
 import { show as organization } from '@/routes/organization';
-import type { Auth, BreadcrumbItem } from '@/types';
+import type { Auth, BreadcrumbItem, UserRole } from '@/types';
 
-const tabs = [
-    { title: 'Overview', href: dashboard() },
-    { title: 'Engagements', href: engagements() },
-    { title: 'Organization', href: organization() },
+const managingRoles: UserRole[] = [
+    'owner',
+    'delivery_manager',
+    'commercial_manager',
 ];
+
+function tabsFor(role: UserRole) {
+    return [
+        { title: 'Overview', href: dashboard() },
+        { title: 'Engagements', href: engagements() },
+        ...(managingRoles.includes(role)
+            ? [{ title: 'Customers', href: customers() }]
+            : []),
+        { title: 'Organization', href: organization() },
+    ];
+}
 
 /**
  * Stubbed commercial position blocks for the left rail. Real figures arrive
@@ -67,6 +79,7 @@ export default function PositionLayout({
 }) {
     const { auth } = usePage<{ auth: Auth }>().props;
     const { url } = usePage();
+    const tabs = tabsFor(auth.user.role);
 
     return (
         <div className="flex min-h-screen flex-col bg-paper text-ink dark:bg-ink dark:text-paper">

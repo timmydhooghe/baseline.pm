@@ -2,16 +2,16 @@
 
 namespace Database\Factories;
 
-use App\Enums\StakeholderRole;
+use App\Enums\EngagementStatus;
 use App\Models\Customer;
+use App\Models\Engagement;
 use App\Models\Organization;
-use App\Models\Stakeholder;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends Factory<Stakeholder>
+ * @extends Factory<Engagement>
  */
-class StakeholderFactory extends Factory
+class EngagementFactory extends Factory
 {
     /**
      * Define the model's default state.
@@ -25,19 +25,18 @@ class StakeholderFactory extends Factory
             'customer_id' => fn (array $attributes): string => Customer::factory()
                 ->create(['organization_id' => $attributes['organization_id']])
                 ->id,
-            'role' => StakeholderRole::Viewer,
-            'name' => fake()->name(),
-            'email' => fake()->unique()->safeEmail(),
+            'name' => fake()->unique()->sentence(3),
+            'status' => EngagementStatus::Draft,
         ];
     }
 
     /**
-     * Assign the given portal role to the stakeholder.
+     * Place the engagement directly in the given lifecycle status.
      */
-    public function role(StakeholderRole $role): static
+    public function status(EngagementStatus $status): static
     {
         return $this->state(fn (array $attributes) => [
-            'role' => $role,
+            'status' => $status,
         ]);
     }
 }

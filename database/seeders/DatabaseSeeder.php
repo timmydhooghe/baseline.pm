@@ -2,21 +2,32 @@
 
 namespace Database\Seeders;
 
+use App\Enums\EngagementStatus;
+use App\Enums\Plan;
+use App\Enums\StakeholderRole;
 use App\Enums\UserRole;
+use App\Models\Customer;
+use App\Models\Engagement;
 use App\Models\Organization;
+use App\Models\Stakeholder;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
     /**
-     * Seed the application's database: one organization with one user per role.
+     * Seed the application's database: one organization with one user per
+     * role, a customer with its stakeholders, and engagements across the
+     * lifecycle.
      *
      * Every user logs in with the password "password", e.g. owner@baseline.test.
      */
     public function run(): void
     {
-        $organization = Organization::factory()->create(['name' => 'Baseline']);
+        $organization = Organization::factory()->create([
+            'name' => 'Baseline',
+            'plan' => Plan::Studio,
+        ]);
 
         foreach (UserRole::cases() as $role) {
             User::factory()
@@ -26,6 +37,38 @@ class DatabaseSeeder extends Seeder
                     'name' => $role->label(),
                     'email' => "{$role->value}@baseline.test",
                 ]);
+        }
+
+        $customer = Customer::factory()
+            ->for($organization)
+            ->create(['name' => 'Acme Industries']);
+
+        $stakeholders = [
+            [StakeholderRole::ProjectManager, 'Petra Molnar', 'pm@acme.test'],
+            [StakeholderRole::Approver, 'Anders Vik', 'approver@acme.test'],
+            [StakeholderRole::Viewer, 'Vera Sloot', 'viewer@acme.test'],
+        ];
+
+        foreach ($stakeholders as [$role, $name, $email]) {
+            Stakeholder::factory()
+                ->for($organization)
+                ->for($customer)
+                ->role($role)
+                ->create(['name' => $name, 'email' => $email]);
+        }
+
+        $engagements = [
+            [EngagementStatus::Draft, 'ERP rollout'],
+            [EngagementStatus::Active, 'Data platform'],
+            [EngagementStatus::Archived, 'Website relaunch'],
+        ];
+
+        foreach ($engagements as [$status, $name]) {
+            Engagement::factory()
+                ->for($organization)
+                ->for($customer)
+                ->status($status)
+                ->create(['name' => $name]);
         }
     }
 }

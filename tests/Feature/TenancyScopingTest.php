@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Customer;
 use App\Models\Organization;
 use App\Models\Scopes\OrganizationScope;
 use App\Models\Stakeholder;
@@ -19,13 +20,16 @@ test('queries on tenant models are scoped to the current organization', function
 
 test('tenant models are assigned to the current organization on create', function () {
     $organization = Organization::factory()->create();
+    $customer = Customer::factory()->for($organization)->create();
 
     Context::add('organization_id', $organization->id);
 
-    $stakeholder = Stakeholder::create([
+    $stakeholder = new Stakeholder([
         'name' => 'Alex Peeters',
         'email' => 'alex@customer.test',
     ]);
+    $stakeholder->customer()->associate($customer);
+    $stakeholder->save();
 
     expect($stakeholder->organization_id)->toBe($organization->id);
 });

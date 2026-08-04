@@ -17,7 +17,7 @@ One PostgreSQL database, row-level tenancy keyed by `organization_id`. `App\Mode
 
 ### Auth boundaries
 
-- Internal users: session auth on the `web` guard (starter kit / Fortify). Public registration is disabled; the owner-invitation flow arrives with WEBAPP-16.
+- Internal users: session auth on the `web` guard (starter kit / Fortify). Public registration is disabled; the owner invites members by email (`invitations` table, token links under `/invitations/{token}`, acceptance runs unauthenticated and resolves by token). External stakeholders never consume paid seats.
 - Customer stakeholders: separate `stakeholder` session guard backed by `App\Models\Stakeholder` (no password — magic-link/signed-URL login lands with the portal work). Portal routes live under `/portal`.
 
 ## Money

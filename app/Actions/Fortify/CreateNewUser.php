@@ -18,8 +18,9 @@ class CreateNewUser implements CreatesNewUsers
     /**
      * Validate and create a newly registered user as the owner of a fresh organization.
      *
-     * Public registration is disabled in config/fortify.php; this action remains
-     * wired for the owner-invitation flow (WEBAPP-16) to build on.
+     * Public registration is disabled in config/fortify.php; members join via
+     * the owner-invitation flow (AcceptInvitationController) instead. This
+     * action remains wired for when self-serve organization sign-up opens.
      *
      * @param  array<string, string>  $input
      */

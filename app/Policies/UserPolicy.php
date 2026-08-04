@@ -21,7 +21,7 @@ class UserPolicy
     }
 
     /**
-     * Only the owner manages members (invitation flow lands with WEBAPP-16).
+     * Only the owner manages members; new members join via the invitation flow.
      */
     public function create(User $user): bool
     {

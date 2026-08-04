@@ -1,0 +1,56 @@
+<?php
+
+namespace App\Enums;
+
+enum EngagementStatus: string
+{
+    case Draft = 'draft';
+    case PreparingBaseline = 'preparing_baseline';
+    case AwaitingBaselineApproval = 'awaiting_baseline_approval';
+    case Active = 'active';
+    case AwaitingFinalAcceptance = 'awaiting_final_acceptance';
+    case Completed = 'completed';
+    case Archived = 'archived';
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::Draft => 'Draft',
+            self::PreparingBaseline => 'Preparing baseline',
+            self::AwaitingBaselineApproval => 'Awaiting baseline approval',
+            self::Active => 'Active',
+            self::AwaitingFinalAcceptance => 'Awaiting final acceptance',
+            self::Completed => 'Completed',
+            self::Archived => 'Archived',
+        };
+    }
+
+    /**
+     * @return list<self>
+     */
+    public function allowedTransitions(): array
+    {
+        return match ($this) {
+            self::Draft => [self::PreparingBaseline],
+            self::PreparingBaseline => [self::AwaitingBaselineApproval],
+            self::AwaitingBaselineApproval => [self::Active],
+            self::Active => [self::AwaitingFinalAcceptance],
+            self::AwaitingFinalAcceptance => [self::Completed],
+            self::Completed => [self::Archived],
+            self::Archived => [],
+        };
+    }
+
+    public function canTransitionTo(self $target): bool
+    {
+        return in_array($target, $this->allowedTransitions(), true);
+    }
+
+    /**
+     * Archived engagements are read-only and free up their plan slot.
+     */
+    public function countsTowardPlanLimit(): bool
+    {
+        return $this !== self::Archived;
+    }
+}

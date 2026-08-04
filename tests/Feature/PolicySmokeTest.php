@@ -2,6 +2,9 @@
 
 use App\Enums\UserRole;
 use App\Models\AuditLog;
+use App\Models\Customer;
+use App\Models\Engagement;
+use App\Models\Invitation;
 use App\Models\Snapshot;
 use App\Models\Stakeholder;
 use App\Models\User;
@@ -52,6 +55,38 @@ test('stakeholders are managed by managing roles only', function (UserRole $role
 
     expect(Gate::forUser($user)->allows('viewAny', Stakeholder::class))->toBe($allowed);
 })->with($everyRole);
+
+test('customers are managed by managing roles only', function (UserRole $role, bool $allowed) {
+    $user = User::factory()->role($role)->create();
+
+    expect(Gate::forUser($user)->allows('viewAny', Customer::class))->toBe($allowed)
+        ->and(Gate::forUser($user)->allows('create', Customer::class))->toBe($allowed);
+})->with($everyRole);
+
+test('every role views the portfolio, only managing roles change it', function (UserRole $role, bool $managing) {
+    $user = User::factory()->role($role)->create();
+    $engagement = Engagement::factory()->for($user->organization)->create();
+
+    expect(Gate::forUser($user)->allows('viewAny', Engagement::class))->toBeTrue()
+        ->and(Gate::forUser($user)->allows('view', $engagement))->toBeTrue()
+        ->and(Gate::forUser($user)->allows('create', Engagement::class))->toBe($managing)
+        ->and(Gate::forUser($user)->allows('transition', $engagement))->toBe($managing)
+        ->and(Gate::forUser($user)->allows('delete', $engagement))->toBeFalse();
+})->with($everyRole);
+
+test('only the owner manages invitations', function (UserRole $role, bool $allowed) {
+    $user = User::factory()->role($role)->create();
+    $invitation = Invitation::factory()->for($user->organization)->create();
+
+    expect(Gate::forUser($user)->allows('create', Invitation::class))->toBe($allowed)
+        ->and(Gate::forUser($user)->allows('delete', $invitation))->toBe($allowed);
+})->with([
+    'owner' => [UserRole::Owner, true],
+    'delivery manager' => [UserRole::DeliveryManager, false],
+    'commercial manager' => [UserRole::CommercialManager, false],
+    'member' => [UserRole::Member, false],
+    'portfolio viewer' => [UserRole::PortfolioViewer, false],
+]);
 
 test('audit logs and snapshots can never be mutated, even by the owner', function () {
     $owner = User::factory()->role(UserRole::Owner)->create();

@@ -8,7 +8,7 @@ use App\Models\User;
 class StakeholderPolicy
 {
     /**
-     * Managing roles handle customer-side contacts (full flow lands with WEBAPP-16).
+     * Managing roles handle customer-side contacts.
      */
     public function viewAny(User $user): bool
     {
