@@ -7,7 +7,7 @@ export const authLabel =
     'font-plex-mono text-[10.5px] font-semibold tracking-[.05em] uppercase text-stone';
 
 export const authInput =
-    'h-auto rounded-none border-[1.5px] border-ink bg-white px-[13px] py-[11px] text-ink shadow-none placeholder:text-ash focus-visible:border-ink focus-visible:ring-0 focus-visible:shadow-[3px_3px_0_var(--color-sun)]';
+    'h-auto rounded-none border-[1.5px] border-ink bg-white px-[13px] py-[11px] text-ink shadow-none placeholder:text-ash focus-visible:border-ink';
 
 export const authSubmitButton =
     'h-auto w-full rounded-none bg-ink py-[13px] text-sm font-bold text-paper shadow-none transition-colors duration-[180ms] hover:bg-rust';

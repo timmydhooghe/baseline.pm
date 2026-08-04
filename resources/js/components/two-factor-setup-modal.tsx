@@ -108,29 +108,29 @@ function TwoFactorSetupStep({
                         </span>
                     </div>
 
-                    <div className="flex w-full space-x-2">
-                        <div className="flex w-full items-stretch overflow-hidden rounded-xl border border-border">
-                            {!manualSetupKey ? (
-                                <div className="flex h-full w-full items-center justify-center bg-muted p-3">
-                                    <Spinner />
-                                </div>
-                            ) : (
-                                <>
-                                    <input
-                                        type="text"
-                                        readOnly
-                                        value={manualSetupKey}
-                                        className="h-full w-full bg-background p-3 text-foreground outline-none"
-                                    />
-                                    <button
-                                        onClick={() => copy(manualSetupKey)}
-                                        className="border-l border-border px-3 hover:bg-muted"
-                                    >
-                                        <IconComponent className="w-4" />
-                                    </button>
-                                </>
-                            )}
-                        </div>
+                    <div className="flex h-9 w-full items-stretch overflow-hidden rounded-md border border-input shadow-xs">
+                        {!manualSetupKey ? (
+                            <div className="flex w-full items-center justify-center bg-muted">
+                                <Spinner />
+                            </div>
+                        ) : (
+                            <>
+                                <input
+                                    type="text"
+                                    readOnly
+                                    value={manualSetupKey}
+                                    className="w-full bg-transparent px-3 text-sm text-foreground outline-none"
+                                />
+                                <button
+                                    type="button"
+                                    aria-label="Copy setup key"
+                                    onClick={() => copy(manualSetupKey)}
+                                    className="border-l border-input px-3 text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground"
+                                >
+                                    <IconComponent className="size-4" />
+                                </button>
+                            </>
+                        )}
                     </div>
                 </>
             )}
