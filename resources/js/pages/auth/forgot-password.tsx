@@ -1,69 +1,89 @@
-// Components
 import { Form, Head } from '@inertiajs/react';
-import { LoaderCircle } from 'lucide-react';
 import InputError from '@/components/input-error';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
+import {
+    authError,
+    authInput,
+    authLabel,
+    authOutlineButton,
+    authSubmitButton,
+    authSuccessBox,
+} from '@/lib/auth-form';
+import { cn } from '@/lib/utils';
 import { login } from '@/routes';
 import { email } from '@/routes/password';
 
 export default function ForgotPassword({ status }: { status?: string }) {
+    const linkSent = Boolean(status);
+
     return (
         <>
-            <Head title="Forgot password" />
+            <Head title="Reset password" />
 
-            {status && (
-                <div className="mb-4 text-center text-sm font-medium text-green-600">
-                    {status}
+            {linkSent && (
+                <div className="mb-4 grid gap-3">
+                    <div className={authSuccessBox}>
+                        <b>Link sent ✓</b> — if that address has an account, the
+                        email is on its way. Check spam before retrying.
+                    </div>
+                    <div className="font-plex-mono text-[10.5px] text-ash">
+                        SINGLE-USE · EXPIRES IN 60 MIN
+                    </div>
                 </div>
             )}
 
-            <div className="space-y-6">
-                <Form {...email.form()}>
-                    {({ processing, errors }) => (
-                        <>
-                            <div className="grid gap-2">
-                                <Label htmlFor="email">Email address</Label>
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    name="email"
-                                    autoComplete="off"
-                                    autoFocus
-                                    placeholder="email@example.com"
-                                />
+            <Form {...email.form()}>
+                {({ processing, errors }) => (
+                    <>
+                        <div className="grid gap-[5px]">
+                            <Label htmlFor="email" className={authLabel}>
+                                Work email
+                            </Label>
+                            <Input
+                                id="email"
+                                type="email"
+                                name="email"
+                                autoComplete="off"
+                                autoFocus
+                                placeholder="ev@northbound.eu"
+                                className={authInput}
+                            />
+                            <InputError
+                                message={errors.email}
+                                className={authError}
+                            />
+                        </div>
 
-                                <InputError message={errors.email} />
-                            </div>
-
-                            <div className="my-6 flex items-center justify-start">
-                                <Button
-                                    className="w-full"
-                                    disabled={processing}
-                                    data-test="email-password-reset-link-button"
-                                >
-                                    {processing && (
-                                        <LoaderCircle className="h-4 w-4 animate-spin" />
-                                    )}
-                                    Email password reset link
-                                </Button>
-                            </div>
-                        </>
-                    )}
-                </Form>
-
-                <div className="space-x-1 text-center text-sm text-muted-foreground">
-                    <span>Or, return to</span>
-                    <TextLink href={login()}>log in</TextLink>
-                </div>
-            </div>
+                        <Button
+                            className={cn(
+                                linkSent ? authOutlineButton : authSubmitButton,
+                                'mt-4',
+                            )}
+                            disabled={processing}
+                            data-test="email-password-reset-link-button"
+                        >
+                            {processing && <Spinner />}
+                            {linkSent ? 'Resend link' : 'SEND RESET LINK →'}
+                        </Button>
+                    </>
+                )}
+            </Form>
         </>
     );
 }
 
-ForgotPassword.layout = {
-    title: 'Forgot password',
-    description: 'Enter your email to receive a password reset link',
-};
+ForgotPassword.layout = (props: { status?: string }) => ({
+    title: 'Reset password',
+    description: props.status
+        ? ''
+        : "We'll email you a single-use reset link. It expires in 60 minutes.",
+    footer: (
+        <TextLink href={login()} className="font-semibold">
+            ← Back to sign in
+        </TextLink>
+    ),
+});

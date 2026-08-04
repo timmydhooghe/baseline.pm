@@ -9,6 +9,13 @@ import PasswordInput from '@/components/password-input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import {
+    authError,
+    authInput,
+    authLabel,
+    authSubmitButton,
+} from '@/lib/auth-form';
+import { cn } from '@/lib/utils';
 import { store } from '@/routes/password/confirm';
 
 export default function ConfirmPassword() {
@@ -28,31 +35,34 @@ export default function ConfirmPassword() {
 
             <Form {...store.form()} resetOnSuccess={['password']}>
                 {({ processing, errors }) => (
-                    <div className="space-y-6">
-                        <div className="grid gap-2">
-                            <Label htmlFor="password">Password</Label>
+                    <>
+                        <div className="grid gap-[5px]">
+                            <Label htmlFor="password" className={authLabel}>
+                                Password
+                            </Label>
                             <PasswordInput
                                 id="password"
                                 name="password"
-                                placeholder="Password"
+                                placeholder="••••••••••••"
                                 autoComplete="current-password"
                                 autoFocus
+                                className={authInput}
                             />
-
-                            <InputError message={errors.password} />
+                            <InputError
+                                message={errors.password}
+                                className={authError}
+                            />
                         </div>
 
-                        <div className="flex items-center">
-                            <Button
-                                className="w-full"
-                                disabled={processing}
-                                data-test="confirm-password-button"
-                            >
-                                {processing && <Spinner />}
-                                Confirm password
-                            </Button>
-                        </div>
-                    </div>
+                        <Button
+                            className={cn(authSubmitButton, 'mt-4')}
+                            disabled={processing}
+                            data-test="confirm-password-button"
+                        >
+                            {processing && <Spinner />}
+                            CONFIRM PASSWORD →
+                        </Button>
+                    </>
                 )}
             </Form>
         </>

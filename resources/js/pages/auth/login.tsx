@@ -8,6 +8,14 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import {
+    authError,
+    authInput,
+    authLabel,
+    authSubmitButton,
+    authSuccessBox,
+} from '@/lib/auth-form';
+import { cn } from '@/lib/utils';
 import { store } from '@/routes/login';
 import { request } from '@/routes/password';
 
@@ -19,20 +27,22 @@ type Props = {
 export default function Login({ status, canResetPassword }: Props) {
     return (
         <>
-            <Head title="Log in" />
+            <Head title="Sign in" />
+
+            {status && (
+                <div className={cn(authSuccessBox, 'mb-4')}>{status}</div>
+            )}
 
             <PasskeyVerify />
 
-            <Form
-                {...store.form()}
-                resetOnSuccess={['password']}
-                className="flex flex-col gap-6"
-            >
+            <Form {...store.form()} resetOnSuccess={['password']}>
                 {({ processing, errors }) => (
                     <>
-                        <div className="grid gap-6">
-                            <div className="grid gap-2">
-                                <Label htmlFor="email">Email address</Label>
+                        <div className="grid gap-2.5">
+                            <div className="grid gap-[5px]">
+                                <Label htmlFor="email" className={authLabel}>
+                                    Work email
+                                </Label>
                                 <Input
                                     id="email"
                                     type="email"
@@ -41,21 +51,30 @@ export default function Login({ status, canResetPassword }: Props) {
                                     autoFocus
                                     tabIndex={1}
                                     autoComplete="email"
-                                    placeholder="email@example.com"
+                                    placeholder="ev@northbound.eu"
+                                    className={authInput}
                                 />
-                                <InputError message={errors.email} />
+                                <InputError
+                                    message={errors.email}
+                                    className={authError}
+                                />
                             </div>
 
-                            <div className="grid gap-2">
-                                <div className="flex items-center">
-                                    <Label htmlFor="password">Password</Label>
+                            <div className="grid gap-[5px]">
+                                <div className="flex items-baseline">
+                                    <Label
+                                        htmlFor="password"
+                                        className={authLabel}
+                                    >
+                                        Password
+                                    </Label>
                                     {canResetPassword && (
                                         <TextLink
                                             href={request()}
-                                            className="ml-auto text-sm"
+                                            className="ml-auto font-plex-mono text-[10.5px] text-ink hover:text-rust"
                                             tabIndex={5}
                                         >
-                                            Forgot your password?
+                                            forgot?
                                         </TextLink>
                                     )}
                                 </div>
@@ -65,50 +84,56 @@ export default function Login({ status, canResetPassword }: Props) {
                                     required
                                     tabIndex={2}
                                     autoComplete="current-password"
-                                    placeholder="Password"
+                                    placeholder="••••••••••••"
+                                    className={authInput}
                                 />
-                                <InputError message={errors.password} />
+                                <InputError
+                                    message={errors.password}
+                                    className={authError}
+                                />
                             </div>
 
-                            <div className="flex items-center space-x-3">
+                            <div className="mt-0.5 flex items-center gap-2.5">
                                 <Checkbox
                                     id="remember"
                                     name="remember"
                                     tabIndex={3}
+                                    className="rounded-none border-[1.5px] border-ink shadow-none"
                                 />
-                                <Label htmlFor="remember">Remember me</Label>
+                                <Label
+                                    htmlFor="remember"
+                                    className="text-[12.5px] font-normal text-stone"
+                                >
+                                    Remember me
+                                </Label>
                             </div>
-
-                            <Button
-                                type="submit"
-                                className="mt-4 w-full"
-                                tabIndex={4}
-                                disabled={processing}
-                                data-test="login-button"
-                            >
-                                {processing && <Spinner />}
-                                Log in
-                            </Button>
                         </div>
 
-                        <div className="text-center text-sm text-muted-foreground">
-                            Accounts are created by invitation from your
-                            organization's owner.
-                        </div>
+                        <Button
+                            type="submit"
+                            className={cn(authSubmitButton, 'mt-4')}
+                            tabIndex={4}
+                            disabled={processing}
+                            data-test="login-button"
+                        >
+                            {processing && <Spinner />}
+                            SIGN IN →
+                        </Button>
                     </>
                 )}
             </Form>
-
-            {status && (
-                <div className="mb-4 text-center text-sm font-medium text-green-600">
-                    {status}
-                </div>
-            )}
         </>
     );
 }
 
 Login.layout = {
-    title: 'Log in to your account',
-    description: 'Enter your email and password below to log in',
+    title: 'Sign in',
+    description: 'Back to your position.',
+    footer: (
+        <div className="border-[1.5px] border-sand-400 bg-[#efece4] px-3.5 py-2.5 text-left text-[11.5px] leading-[1.5] text-stone">
+            Accounts are invite-only — ask your organization owner for an{' '}
+            <b className="text-ink">invite</b>. Client? You&rsquo;ll get a
+            portal link by email, no account needed here.
+        </div>
+    ),
 };

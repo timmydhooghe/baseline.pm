@@ -10,6 +10,7 @@ import {
     InputOTPSlot,
 } from '@/components/ui/input-otp';
 import { OTP_MAX_LENGTH } from '@/hooks/use-two-factor-auth';
+import { authError, authInput, authSubmitButton } from '@/lib/auth-form';
 import { store } from '@/routes/two-factor/login';
 
 export default function TwoFactorChallenge() {
@@ -70,9 +71,11 @@ export default function TwoFactorChallenge() {
                                         placeholder="Enter recovery code"
                                         autoFocus={showRecoveryInput}
                                         required
+                                        className={authInput}
                                     />
                                     <InputError
                                         message={errors.recovery_code}
+                                        className={authError}
                                     />
                                 </>
                             ) : (
@@ -100,23 +103,26 @@ export default function TwoFactorChallenge() {
                                             </InputOTPGroup>
                                         </InputOTP>
                                     </div>
-                                    <InputError message={errors.code} />
+                                    <InputError
+                                        message={errors.code}
+                                        className={authError}
+                                    />
                                 </div>
                             )}
 
                             <Button
                                 type="submit"
-                                className="w-full"
+                                className={authSubmitButton}
                                 disabled={processing}
                             >
-                                Continue
+                                CONTINUE →
                             </Button>
 
-                            <div className="text-center text-sm text-muted-foreground">
+                            <div className="text-center text-[12.5px] text-stone">
                                 <span>or you can </span>
                                 <button
                                     type="button"
-                                    className="cursor-pointer text-foreground underline decoration-neutral-300 underline-offset-4 transition-colors duration-300 ease-out hover:decoration-current! dark:decoration-neutral-500"
+                                    className="cursor-pointer font-semibold text-ink underline underline-offset-[3px] transition-colors duration-[180ms] hover:text-rust"
                                     onClick={() =>
                                         toggleRecoveryMode(clearErrors)
                                     }

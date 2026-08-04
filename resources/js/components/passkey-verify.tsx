@@ -4,8 +4,8 @@ import { usePasskeyVerify } from '@laravel/passkeys/react';
 import { KeyRound } from 'lucide-react';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { Spinner } from '@/components/ui/spinner';
+import { authError, authOutlineButton } from '@/lib/auth-form';
 
 type Props = {
     routes?: {
@@ -45,29 +45,27 @@ export default function PasskeyVerify({
                 <Button
                     type="button"
                     variant="outline"
-                    className="w-full"
+                    className={authOutlineButton}
                     onClick={verify}
                     disabled={isLoading}
                 >
                     {isLoading ? <Spinner /> : <KeyRound className="h-4 w-4" />}
                     {isLoading
                         ? (loadingLabel ?? 'Authenticating...')
-                        : (label ?? 'Sign in with a passkey')}
+                        : (label ?? 'Continue with a passkey')}
                 </Button>
                 {error && (
-                    <InputError message={error} className="text-center" />
+                    <InputError
+                        message={error}
+                        className={`${authError} text-center`}
+                    />
                 )}
             </div>
 
-            <div className="relative my-6">
-                <div className="absolute inset-0 flex items-center">
-                    <Separator className="w-full" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">
-                        {separator ?? 'Or continue with email'}
-                    </span>
-                </div>
+            <div className="my-4.5 flex items-center gap-3 font-plex-mono text-[10.5px] text-ash uppercase">
+                <div className="h-px flex-1 bg-sand-400" />
+                {separator ?? 'Or continue with email'}
+                <div className="h-px flex-1 bg-sand-400" />
             </div>
         </>
     );
