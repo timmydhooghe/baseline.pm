@@ -227,6 +227,12 @@ class Baseline extends Model
                 'comment' => $comment,
             ]);
 
+            /*
+             * Approval turns commitments into execution: every deliverable
+             * item gets its living acceptance record (FA-22).
+             */
+            Deliverable::provisionForBaseline($this);
+
             if ($this->engagement->status === EngagementStatus::AwaitingBaselineApproval) {
                 $this->engagement->transitionTo(EngagementStatus::Active);
             }

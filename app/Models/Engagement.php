@@ -3,14 +3,19 @@
 namespace App\Models;
 
 use App\Enums\BaselineStatus;
+use App\Enums\DeliverableStatus;
 use App\Enums\EngagementStatus;
+use App\Enums\FinalAcceptanceStatus;
 use App\Enums\IntegrationConnectionStatus;
 use App\Enums\WorkItemSource;
 use App\Jobs\SyncIntegrationConnection;
 use App\Models\Concerns\BelongsToOrganization;
 use App\Models\Concerns\RecordsAuditLog;
+use App\Notifications\FinalAcceptanceSubmitted;
 use App\ValueObjects\Money;
+use Carbon\CarbonImmutable;
 use Database\Factories\EngagementFactory;
+use DateTimeInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -42,6 +47,8 @@ use LogicException;
  * @property-read Collection<int, WorkItem> $workItems
  * @property-read Collection<int, ChangeRequest> $changeRequests
  * @property-read Collection<int, Release> $releases
+ * @property-read Collection<int, Deliverable> $deliverables
+ * @property-read Collection<int, FinalAcceptance> $finalAcceptances
  */
 #[Fillable(['name'])]
 class Engagement extends Model
@@ -92,6 +99,16 @@ class Engagement extends Model
                 throw new LogicException("An engagement cannot move from [{$from->value}] to [{$target->value}].");
             }
 
+            /*
+             * FA-24: Completed sits behind the final acceptance gate.
+             * "Accepted" always means signed — the customer's recorded
+             * acceptance, never an internal shortcut.
+             */
+            if ($target === EngagementStatus::Completed
+                && $this->finalAcceptances()->where('status', FinalAcceptanceStatus::Accepted)->doesntExist()) {
+                throw new LogicException('Completion requires the customer\'s signed final acceptance.');
+            }
+
             $this->status = $target;
             $this->save();
 
@@ -101,7 +118,89 @@ class Engagement extends Model
             ]);
 
             $this->syncSubmittedBaseline($from, $target);
+            $this->syncFinalAcceptance($from, $target);
         });
+    }
+
+    /**
+     * Submit the engagement for final acceptance (FA-24): the gate before
+     * Completed. Requires every deliverable to be signed off already, then
+     * freezes twin snapshots of the accepted record, moves the engagement to
+     * awaiting final acceptance and notifies every stakeholder with approval
+     * rights — the completion itself arrives only with their signature.
+     */
+    public function submitForFinalAcceptance(DateTimeInterface|string $respondBy, ?User $submitter = null): FinalAcceptance
+    {
+        $respondBy = CarbonImmutable::parse($respondBy)->endOfDay();
+
+        $finalAcceptance = DB::transaction(function () use ($respondBy, $submitter): FinalAcceptance {
+            self::query()->whereKey($this->id)->lockForUpdate()->first();
+            $this->refresh();
+
+            if (! $this->status->canTransitionTo(EngagementStatus::AwaitingFinalAcceptance)) {
+                throw new LogicException("An engagement cannot be submitted for final acceptance from [{$this->status->value}].");
+            }
+
+            if ($respondBy->isPast()) {
+                throw ValidationException::withMessages([
+                    'respond_by' => __('The respond-by deadline must lie in the future.'),
+                ]);
+            }
+
+            $open = $this->deliverables()->whereNot('status', DeliverableStatus::Accepted)->count();
+
+            if ($open > 0) {
+                throw ValidationException::withMessages([
+                    'respond_by' => trans_choice(
+                        '{1}Final acceptance assembles from signed deliverables — one still awaits its signature.|[2,*]Final acceptance assembles from signed deliverables — :count still await their signature.',
+                        $open,
+                        ['count' => $open],
+                    ),
+                ]);
+            }
+
+            $finalAcceptance = new FinalAcceptance([
+                'respond_by' => $respondBy,
+                'submitted_at' => now(),
+                'created_by' => $submitter?->id,
+            ]);
+            $finalAcceptance->organization_id = $this->organization_id;
+            $finalAcceptance->engagement_id = $this->id;
+            $finalAcceptance->save();
+
+            $review = Snapshot::capture($finalAcceptance, $finalAcceptance->snapshotPayload(internal: true), $submitter);
+            $customer = Snapshot::capture($finalAcceptance, $finalAcceptance->snapshotPayload(internal: false), $submitter);
+
+            $finalAcceptance->review_snapshot_id = $review->id;
+            $finalAcceptance->customer_snapshot_id = $customer->id;
+            $finalAcceptance->save();
+
+            AuditLog::record('final_acceptance.submitted', $finalAcceptance, [
+                'engagement' => $this->name,
+                'respond_by' => $respondBy->toDateString(),
+                'accepted_value' => $this->acceptedValue()->format(),
+                'review_snapshot_id' => $review->id,
+                'customer_snapshot_id' => $customer->id,
+            ]);
+
+            $this->transitionTo(EngagementStatus::AwaitingFinalAcceptance);
+
+            return $finalAcceptance;
+        });
+
+        foreach ($finalAcceptance->approvers() as $approver) {
+            $approver->notify(new FinalAcceptanceSubmitted($finalAcceptance));
+        }
+
+        return $finalAcceptance;
+    }
+
+    /**
+     * The most recent final acceptance request, whatever its outcome.
+     */
+    public function currentFinalAcceptance(): ?FinalAcceptance
+    {
+        return $this->finalAcceptances()->latest('created_at')->first();
     }
 
     /**
@@ -389,10 +488,23 @@ class Engagement extends Model
     }
 
     /**
-     * The position rail summary (FA-10): what is contracted and what the
-     * unresolved drift would be worth, always visible beside the engagement's
-     * pages. The waterfall's remaining lines — burned, pending CRs, accepted
-     * value — arrive with their own features (FA-14, FA-16, FA-23).
+     * The signed-off value on the rail (FA-23): every accepted deliverable's
+     * value as frozen at the moment of signature — accepted always means
+     * signed, so this line only ever grows by customer decision.
+     */
+    public function acceptedValue(): Money
+    {
+        return Money::fromCents((int) $this->deliverables()
+            ->where('status', DeliverableStatus::Accepted)
+            ->sum('accepted_value_cents'));
+    }
+
+    /**
+     * The position rail summary (FA-10, FA-23): what is contracted, what the
+     * customer has signed off, and what the unresolved drift would be worth,
+     * always visible beside the engagement's pages. The waterfall's remaining
+     * lines — burned, pending CRs — arrive with their own features (FA-14,
+     * FA-16).
      *
      * @return array<string, mixed>
      */
@@ -405,6 +517,11 @@ class Engagement extends Model
             'engagementId' => $this->id,
             'contracted' => $approved?->contract_value->toArray(),
             'baselineVersion' => $approved?->version,
+            'accepted' => [
+                'count' => $this->deliverables()->where('status', DeliverableStatus::Accepted)->count(),
+                'total' => $this->deliverables()->count(),
+                'value' => $this->acceptedValue()->toArray(),
+            ],
             'unbilledRisk' => [
                 'count' => $risk['count'],
                 'unpriced' => $risk['unpriced'],
@@ -448,6 +565,42 @@ class Engagement extends Model
         } elseif ($target === EngagementStatus::PreparingBaseline) {
             $submitted->returnToDraft('withdrawn');
         }
+    }
+
+    /**
+     * Keep the open final acceptance in step when the engagement is moved
+     * back to Active by hand: the request is withdrawn, its frozen snapshots
+     * stay on record. The decision paths flip the request's status before
+     * transitioning the engagement, so this never runs twice for one
+     * decision.
+     */
+    protected function syncFinalAcceptance(EngagementStatus $from, EngagementStatus $target): void
+    {
+        if ($from !== EngagementStatus::AwaitingFinalAcceptance || $target !== EngagementStatus::Active) {
+            return;
+        }
+
+        $this->finalAcceptances()
+            ->where('status', FinalAcceptanceStatus::AwaitingResponse)
+            ->latest('created_at')
+            ->first()
+            ?->withdraw();
+    }
+
+    /**
+     * @return HasMany<Deliverable, $this>
+     */
+    public function deliverables(): HasMany
+    {
+        return $this->hasMany(Deliverable::class);
+    }
+
+    /**
+     * @return HasMany<FinalAcceptance, $this>
+     */
+    public function finalAcceptances(): HasMany
+    {
+        return $this->hasMany(FinalAcceptance::class);
     }
 
     /**

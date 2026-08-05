@@ -1,13 +1,17 @@
 <?php
 
+use App\Enums\AcceptanceDecision;
 use App\Enums\BaselineStatus;
 use App\Enums\EngagementStatus;
+use App\Enums\StakeholderRole;
 use App\Enums\UserRole;
 use App\Models\AuditLog;
 use App\Models\Baseline;
 use App\Models\Customer;
 use App\Models\Engagement;
+use App\Models\Stakeholder;
 use App\Models\User;
+use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('a manager starts an engagement as a draft', function () {
@@ -49,6 +53,8 @@ test('members cannot start engagements', function () {
 });
 
 test('an engagement walks the full lifecycle to archived', function () {
+    Notification::fake();
+
     $manager = User::factory()->role(UserRole::DeliveryManager)->create();
     $engagement = Engagement::factory()->for($manager->organization)->create();
 
@@ -66,9 +72,6 @@ test('an engagement walks the full lifecycle to archived', function () {
         EngagementStatus::PreparingBaseline,
         EngagementStatus::AwaitingBaselineApproval,
         EngagementStatus::Active,
-        EngagementStatus::AwaitingFinalAcceptance,
-        EngagementStatus::Completed,
-        EngagementStatus::Archived,
     ];
 
     foreach ($path as $target) {
@@ -79,10 +82,37 @@ test('an engagement walks the full lifecycle to archived', function () {
         expect($engagement->refresh()->status)->toBe($target);
     }
 
-    expect(AuditLog::query()
-        ->where('action', 'engagement.transitioned')
-        ->where('subject_id', $engagement->id)
-        ->count())->toBe(count($path));
+    /*
+     * The road to Completed runs through the final acceptance gate (FA-24):
+     * submission moves the engagement to awaiting final acceptance, the
+     * customer's signed acceptance completes it — see
+     * DeliverableAcceptanceTest for the gate itself.
+     */
+    $approver = Stakeholder::factory()
+        ->for($manager->organization)
+        ->for($engagement->customer)
+        ->role(StakeholderRole::Approver)
+        ->create();
+
+    $this->actingAs($manager)
+        ->post(route('engagements.final-acceptance.store', $engagement), ['respond_by' => today()->addDays(7)->toDateString()])
+        ->assertRedirect(route('engagements.show', $engagement));
+
+    expect($engagement->refresh()->status)->toBe(EngagementStatus::AwaitingFinalAcceptance);
+
+    $engagement->currentFinalAcceptance()->recordResponse($approver, AcceptanceDecision::Accepted);
+
+    expect($engagement->refresh()->status)->toBe(EngagementStatus::Completed);
+
+    $this->actingAs($manager)
+        ->post(route('engagements.transition', $engagement), ['status' => 'archived'])
+        ->assertRedirect(route('engagements.show', $engagement));
+
+    expect($engagement->refresh()->status)->toBe(EngagementStatus::Archived)
+        ->and(AuditLog::query()
+            ->where('action', 'engagement.transitioned')
+            ->where('subject_id', $engagement->id)
+            ->count())->toBe(6);
 });
 
 test('lifecycle steps cannot be skipped', function () {

@@ -1,5 +1,6 @@
 import { Link } from '@inertiajs/react';
 import { cn } from '@/lib/utils';
+import { index as deliverablesIndex } from '@/routes/engagements/deliverables';
 import { show as triageShow } from '@/routes/engagements/triage';
 import type { EngagementPositionSummary } from '@/types';
 
@@ -7,11 +8,11 @@ const blockLabel =
     'font-plex-mono text-[11px] font-semibold text-stone dark:text-fog';
 
 /**
- * The engagement's commercial position rail (FA-10, FA-14). Contracted value
- * and unbilled risk are live; the waterfall's remaining lines (burned,
- * pending CRs, accepted) arrive with their own features and stay dashed
- * until then. Unbilled risk clicks through to the triage inbox it derives
- * from.
+ * The engagement's commercial position rail (FA-10, FA-14, FA-23).
+ * Contracted value, signed-off value and unbilled risk are live; the
+ * waterfall's remaining lines (burned, pending CRs) arrive with their own
+ * features and stay dashed until then. Every live figure clicks through to
+ * the record it derives from.
  */
 export default function EngagementPositionRail({
     position,
@@ -20,6 +21,8 @@ export default function EngagementPositionRail({
 }) {
     const risk = position.unbilledRisk;
     const hasRisk = risk.count > 0;
+    const accepted = position.accepted;
+    const hasAccepted = accepted.count > 0;
 
     return (
         <div className="flex flex-col gap-3">
@@ -38,6 +41,40 @@ export default function EngagementPositionRail({
                     </div>
                 )}
             </div>
+
+            <Link
+                href={deliverablesIndex(position.engagementId)}
+                prefetch
+                data-test="rail-accepted"
+                className={cn(
+                    'block border-[1.5px] bg-paper p-3 transition-colors dark:bg-ink',
+                    hasAccepted
+                        ? 'border-moss hover:bg-moss/5'
+                        : 'border-ink hover:bg-ink/5 dark:border-paper dark:hover:bg-paper/5',
+                )}
+            >
+                <div
+                    className={cn(
+                        'font-plex-mono text-[11px] font-semibold',
+                        hasAccepted ? 'text-moss' : 'text-stone dark:text-fog',
+                    )}
+                >
+                    ACCEPTED
+                </div>
+                <div
+                    className={cn(
+                        'mt-1 font-plex-mono text-[20px] font-semibold',
+                        hasAccepted && 'text-moss',
+                    )}
+                >
+                    {accepted.value.formatted}
+                </div>
+                <div className="mt-1 text-[11px] text-stone dark:text-fog">
+                    {accepted.total === 0
+                        ? 'No deliverables yet'
+                        : `${accepted.count}/${accepted.total} signed off`}
+                </div>
+            </Link>
 
             <Link
                 href={triageShow(position.engagementId)}

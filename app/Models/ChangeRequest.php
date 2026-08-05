@@ -591,9 +591,24 @@ class ChangeRequest extends Model
             ]);
         }
 
+        /*
+         * The ledger versioned underneath execution: deliverable acceptance
+         * records and work-item mappings follow their items onto the new
+         * version's rows, and the appended change-request deliverable gets
+         * its own record (FA-22, FA-23).
+         */
+        Deliverable::repointToMintedItems($itemMap);
+
+        foreach (WorkItemLink::query()->whereIn('baseline_item_id', array_keys($itemMap))->get() as $link) {
+            $link->baseline_item_id = $itemMap[$link->baseline_item_id];
+            $link->save();
+        }
+
         $next->status = BaselineStatus::Approved;
         $next->approved_at = now();
         $next->save();
+
+        Deliverable::provisionForBaseline($next);
 
         AuditLog::record('baseline.version_minted', $next, [
             'version' => $next->version,

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ChangeRequestStatus;
+use App\Enums\DeliverableStatus;
 use App\Enums\EngagementStatus;
 use App\Http\Requests\Engagements\StoreEngagementRequest;
 use App\Http\Requests\Engagements\TransitionEngagementRequest;
@@ -104,6 +105,7 @@ class EngagementController extends Controller
         Gate::authorize('view', $engagement);
 
         $baseline = $engagement->openBaseline() ?? $engagement->approvedBaseline();
+        $finalAcceptance = $engagement->currentFinalAcceptance();
 
         return Inertia::render('engagements/show', [
             'engagement' => [
@@ -148,6 +150,26 @@ class EngagementController extends Controller
                 'awaiting' => $engagement->changeRequests()
                     ->where('status', ChangeRequestStatus::AwaitingApproval)
                     ->count(),
+            ],
+            'acceptance' => [
+                'total' => $engagement->deliverables()->count(),
+                'accepted' => $engagement->deliverables()
+                    ->where('status', DeliverableStatus::Accepted)
+                    ->count(),
+                'awaiting' => $engagement->deliverables()
+                    ->where('status', DeliverableStatus::AwaitingAcceptance)
+                    ->count(),
+                'acceptedValue' => $engagement->acceptedValue()->toArray(),
+                'finalAcceptance' => $finalAcceptance === null ? null : [
+                    'id' => $finalAcceptance->id,
+                    'status' => $finalAcceptance->status->value,
+                    'statusLabel' => $finalAcceptance->status->label(),
+                    'submittedAt' => $finalAcceptance->submitted_at?->toFormattedDateString(),
+                    'respondBy' => $finalAcceptance->respond_by?->toFormattedDateString(),
+                    'decidedAt' => $finalAcceptance->decided_at?->toFormattedDateString(),
+                    'decidedBy' => $finalAcceptance->stakeholder_name,
+                    'comment' => $finalAcceptance->comment,
+                ],
             ],
             'lifecycle' => collect(EngagementStatus::cases())
                 ->map(fn (EngagementStatus $status): array => [

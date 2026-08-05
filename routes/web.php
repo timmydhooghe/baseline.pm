@@ -10,13 +10,20 @@ use App\Http\Controllers\ChangeRequestController;
 use App\Http\Controllers\ChangeRequestProposalController;
 use App\Http\Controllers\ChangeRequestSubmissionController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\DeliverableController;
+use App\Http\Controllers\DeliverableEvidenceController;
+use App\Http\Controllers\DeliverableSubmissionController;
 use App\Http\Controllers\EngagementController;
+use App\Http\Controllers\FinalAcceptanceController;
 use App\Http\Controllers\IntegrationAccountController;
 use App\Http\Controllers\IntegrationConnectionController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\MemberController;
+use App\Http\Controllers\MilestoneAcceptancePackController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\PortalChangeRequestController;
+use App\Http\Controllers\PortalDeliverableController;
+use App\Http\Controllers\PortalFinalAcceptanceController;
 use App\Http\Controllers\RateCardController;
 use App\Http\Controllers\StakeholderController;
 use App\Http\Controllers\TriageController;
@@ -71,6 +78,15 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::put('change-requests/{changeRequest}/proposal', [ChangeRequestProposalController::class, 'update'])->name('change-requests.proposal.update');
     Route::post('change-requests/{changeRequest}/submit', [ChangeRequestSubmissionController::class, 'store'])->name('change-requests.submit');
 
+    Route::get('engagements/{engagement}/deliverables', [DeliverableController::class, 'index'])->name('engagements.deliverables.index');
+    Route::get('deliverables/{deliverable}', [DeliverableController::class, 'show'])->name('deliverables.show');
+    Route::patch('deliverables/{deliverable}', [DeliverableController::class, 'update'])->name('deliverables.update');
+    Route::post('deliverables/{deliverable}/evidence', [DeliverableEvidenceController::class, 'store'])->name('deliverables.evidence.store');
+    Route::delete('deliverables/{deliverable}/evidence/{evidence}', [DeliverableEvidenceController::class, 'destroy'])->scopeBindings()->name('deliverables.evidence.destroy');
+    Route::post('deliverables/{deliverable}/submit', [DeliverableSubmissionController::class, 'store'])->name('deliverables.submit');
+    Route::get('engagements/{engagement}/milestones/{milestone}/acceptance-pack', [MilestoneAcceptancePackController::class, 'show'])->name('engagements.milestones.acceptance-pack');
+    Route::post('engagements/{engagement}/final-acceptance', [FinalAcceptanceController::class, 'store'])->name('engagements.final-acceptance.store');
+
     Route::get('customers', [CustomerController::class, 'index'])->name('customers.index');
     Route::post('customers', [CustomerController::class, 'store'])->name('customers.store');
     Route::get('customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
@@ -106,10 +122,11 @@ Route::middleware('guest')->group(function (): void {
 });
 
 /*
- * Stakeholder portal. Change request review runs on personally signed links
- * from the approver notifications — the signature covers the stakeholder
- * parameter, so identity cannot be swapped. The full portal (stakeholder
- * guard, shared records) lands with FA-27.
+ * Stakeholder portal. Change request, deliverable and final acceptance
+ * reviews run on personally signed links from the approver notifications —
+ * the signature covers the stakeholder parameter, so identity cannot be
+ * swapped. The full portal (stakeholder guard, shared records) lands with
+ * FA-27.
  */
 Route::prefix('portal')->name('portal.')->group(function (): void {
     Route::inertia('/', 'portal/welcome')->name('welcome');
@@ -119,6 +136,14 @@ Route::prefix('portal')->name('portal.')->group(function (): void {
         Route::post('change-requests/{changeRequest}/review/{stakeholder}', [PortalChangeRequestController::class, 'store'])
             ->middleware('throttle:10,1')
             ->name('change-requests.respond');
+        Route::get('deliverables/{deliverable}/review/{stakeholder}', [PortalDeliverableController::class, 'show'])->name('deliverables.show');
+        Route::post('deliverables/{deliverable}/review/{stakeholder}', [PortalDeliverableController::class, 'store'])
+            ->middleware('throttle:10,1')
+            ->name('deliverables.respond');
+        Route::get('final-acceptances/{finalAcceptance}/review/{stakeholder}', [PortalFinalAcceptanceController::class, 'show'])->name('final-acceptances.show');
+        Route::post('final-acceptances/{finalAcceptance}/review/{stakeholder}', [PortalFinalAcceptanceController::class, 'store'])
+            ->middleware('throttle:10,1')
+            ->name('final-acceptances.respond');
     });
 });
 

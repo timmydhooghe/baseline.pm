@@ -27,7 +27,9 @@ enum EngagementStatus: string
 
     /**
      * A rejected, clarification-requested or withdrawn baseline submission
-     * moves the engagement back from awaiting approval to preparing.
+     * moves the engagement back from awaiting approval to preparing; a
+     * rejected, clarified or withdrawn final acceptance moves it back from
+     * awaiting final acceptance to active (FA-24).
      *
      * @return list<self>
      */
@@ -38,7 +40,7 @@ enum EngagementStatus: string
             self::PreparingBaseline => [self::AwaitingBaselineApproval],
             self::AwaitingBaselineApproval => [self::Active, self::PreparingBaseline],
             self::Active => [self::AwaitingFinalAcceptance],
-            self::AwaitingFinalAcceptance => [self::Completed],
+            self::AwaitingFinalAcceptance => [self::Completed, self::Active],
             self::Completed => [self::Archived],
             self::Archived => [],
         };

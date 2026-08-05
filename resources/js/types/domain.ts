@@ -29,6 +29,11 @@ export type EngagementPositionSummary = {
     engagementId: string;
     contracted: Money | null;
     baselineVersion: number | null;
+    accepted: {
+        count: number;
+        total: number;
+        value: Money;
+    };
     unbilledRisk: {
         count: number;
         unpriced: number;

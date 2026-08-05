@@ -1,5 +1,14 @@
-import { Head, Link, router, setLayoutProps, usePage } from '@inertiajs/react';
+import {
+    Form,
+    Head,
+    Link,
+    router,
+    setLayoutProps,
+    usePage,
+} from '@inertiajs/react';
+import { useState } from 'react';
 import EngagementController from '@/actions/App/Http/Controllers/EngagementController';
+import FinalAcceptanceController from '@/actions/App/Http/Controllers/FinalAcceptanceController';
 import EngagementStatusBadge from '@/components/engagement-status-badge';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
@@ -12,6 +21,8 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { show as customerShow } from '@/routes/customers';
 import {
@@ -20,9 +31,11 @@ import {
 } from '@/routes/engagements';
 import { show as baselineShow } from '@/routes/engagements/baseline';
 import { index as changeRequestsIndex } from '@/routes/engagements/change-requests';
+import { index as deliverablesIndex } from '@/routes/engagements/deliverables';
 import { show as workShow } from '@/routes/engagements/work';
 import type {
     BaselineStatus,
+    EngagementAcceptanceSummary,
     EngagementPositionSummary,
     EngagementStatus,
     EngagementWorkSummary,
@@ -57,6 +70,7 @@ type Props = {
     baseline: BaselineSummary | null;
     work: EngagementWorkSummary;
     changeControl: ChangeControlSummary;
+    acceptance: EngagementAcceptanceSummary;
     lifecycle: SelectOption[];
     position: EngagementPositionSummary;
     can: { transition: boolean; viewCustomer: boolean };
@@ -67,6 +81,7 @@ export default function EngagementsShow({
     baseline,
     work,
     changeControl,
+    acceptance,
     lifecycle,
     position,
     can,
@@ -80,11 +95,17 @@ export default function EngagementsShow({
     });
 
     const { errors } = usePage().props;
+    const [requestingAcceptance, setRequestingAcceptance] = useState(false);
 
     const currentIndex = lifecycle.findIndex(
         (status) => status.value === engagement.status,
     );
     const isArchived = engagement.status === 'archived';
+
+    const allSignedOff =
+        acceptance.total > 0 && acceptance.accepted === acceptance.total;
+    const canRequestFinalAcceptance =
+        can.transition && engagement.status === 'active' && allSignedOff;
 
     const transition = (status: string) =>
         router.post(
@@ -333,13 +354,188 @@ export default function EngagementsShow({
                     </div>
                 </div>
 
+                <div className="border-[1.5px] border-ink dark:border-paper">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b-[1.5px] border-ink px-4 py-3 dark:border-paper">
+                        <span className="font-plex-mono text-[11px] font-semibold tracking-[0.08em] text-stone uppercase dark:text-fog">
+                            Deliverables &amp; acceptance
+                        </span>
+                        {acceptance.total > 0 && (
+                            <span className="font-plex-mono text-[11px] font-semibold uppercase">
+                                {acceptance.accepted}/{acceptance.total} signed
+                                {acceptance.awaiting > 0 &&
+                                    ` · ${acceptance.awaiting} awaiting signature`}
+                                {' · '}
+                                {acceptance.acceptedValue.formatted} accepted
+                            </span>
+                        )}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                        <p className="max-w-xl text-[13px] text-stone dark:text-fog">
+                            {acceptance.total === 0 &&
+                                'Deliverable records appear once a baseline is approved. Each carries progress, evidence and its own acceptance review.'}
+                            {acceptance.total > 0 && !allSignedOff && (
+                                <>
+                                    {acceptance.total} deliverable
+                                    {acceptance.total === 1 ? '' : 's'} on
+                                    record.{' '}
+                                    <span className="font-semibold">
+                                        Accepted always means signed
+                                    </span>{' '}
+                                    — the customer reviews a frozen snapshot and
+                                    the signed value accrues to your position.
+                                </>
+                            )}
+                            {allSignedOff &&
+                                'Every deliverable is signed off. The engagement can go to the customer for final acceptance.'}
+                        </p>
+                        <Button
+                            asChild
+                            variant="outline"
+                            className="rounded-none border-[1.5px] border-ink font-semibold shadow-none dark:border-paper"
+                            data-test="open-deliverables-button"
+                        >
+                            <Link
+                                href={deliverablesIndex(engagement.id)}
+                                prefetch
+                            >
+                                Open deliverables →
+                            </Link>
+                        </Button>
+                    </div>
+
+                    {acceptance.finalAcceptance !== null && (
+                        <div
+                            className={cn(
+                                'border-t-[1.5px] px-4 py-3 font-plex-mono text-[12px] font-semibold uppercase',
+                                acceptance.finalAcceptance.status ===
+                                    'accepted' && 'border-moss text-moss',
+                                acceptance.finalAcceptance.status ===
+                                    'awaiting_response' &&
+                                    'border-ink bg-sun/40 dark:border-paper',
+                                (acceptance.finalAcceptance.status ===
+                                    'rejected' ||
+                                    acceptance.finalAcceptance.status ===
+                                        'clarification_requested') &&
+                                    'border-rust text-rust',
+                                acceptance.finalAcceptance.status ===
+                                    'withdrawn' &&
+                                    'border-ink/40 text-stone dark:border-paper/40 dark:text-fog',
+                            )}
+                            data-test="final-acceptance-state"
+                        >
+                            {acceptance.finalAcceptance.status ===
+                                'awaiting_response' &&
+                                `Final acceptance with the customer — response due ${acceptance.finalAcceptance.respondBy}.`}
+                            {acceptance.finalAcceptance.status === 'accepted' &&
+                                `Final acceptance signed by ${acceptance.finalAcceptance.decidedBy} on ${acceptance.finalAcceptance.decidedAt}.`}
+                            {(acceptance.finalAcceptance.status ===
+                                'rejected' ||
+                                acceptance.finalAcceptance.status ===
+                                    'clarification_requested') &&
+                                `${acceptance.finalAcceptance.statusLabel} on ${acceptance.finalAcceptance.decidedAt} by ${acceptance.finalAcceptance.decidedBy} — back with the delivery team.`}
+                            {acceptance.finalAcceptance.status ===
+                                'withdrawn' &&
+                                'The last final acceptance request was withdrawn.'}
+                        </div>
+                    )}
+                </div>
+
+                {canRequestFinalAcceptance && (
+                    <div className="flex flex-wrap items-center gap-3">
+                        <Dialog
+                            open={requestingAcceptance}
+                            onOpenChange={setRequestingAcceptance}
+                        >
+                            <DialogTrigger asChild>
+                                <Button
+                                    className="rounded-none bg-ink font-semibold text-paper shadow-none hover:bg-rust dark:bg-paper dark:text-ink dark:hover:bg-rust dark:hover:text-paper"
+                                    data-test="open-final-acceptance"
+                                >
+                                    Submit for final acceptance →
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogTitle>
+                                    Submit {engagement.name} for final
+                                    acceptance
+                                </DialogTitle>
+                                <DialogDescription>
+                                    The signed record freezes into an immutable
+                                    snapshot and goes to the customer's
+                                    approvers. Their signature — and only their
+                                    signature — completes the engagement.
+                                </DialogDescription>
+                                <Form
+                                    {...FinalAcceptanceController.store.form(
+                                        engagement.id,
+                                    )}
+                                    onSuccess={() =>
+                                        setRequestingAcceptance(false)
+                                    }
+                                    className="flex flex-col gap-4"
+                                >
+                                    {({ processing, errors: formErrors }) => (
+                                        <>
+                                            <div className="grid gap-2">
+                                                <Label htmlFor="final-respond-by">
+                                                    Respond by
+                                                </Label>
+                                                <Input
+                                                    id="final-respond-by"
+                                                    name="respond_by"
+                                                    type="date"
+                                                    required
+                                                    className="rounded-none border-[1.5px] border-ink font-plex-mono shadow-none dark:border-paper"
+                                                    data-test="final-respond-by"
+                                                />
+                                                <InputError
+                                                    message={
+                                                        formErrors.respond_by
+                                                    }
+                                                />
+                                            </div>
+                                            <DialogFooter className="gap-2">
+                                                <DialogClose asChild>
+                                                    <Button
+                                                        variant="secondary"
+                                                        type="button"
+                                                    >
+                                                        Cancel
+                                                    </Button>
+                                                </DialogClose>
+                                                <Button
+                                                    type="submit"
+                                                    disabled={processing}
+                                                    data-test="submit-final-acceptance"
+                                                >
+                                                    Freeze &amp; submit →
+                                                </Button>
+                                            </DialogFooter>
+                                        </>
+                                    )}
+                                </Form>
+                            </DialogContent>
+                        </Dialog>
+                    </div>
+                )}
+
                 {can.transition && engagement.allowedTransitions.length > 0 && (
                     <div className="flex flex-wrap items-center gap-3">
                         {engagement.allowedTransitions
                             .filter(
                                 (target) =>
+                                    /*
+                                     * Approval gates own their roads: a
+                                     * baseline submission opens the review,
+                                     * a final acceptance submission opens the
+                                     * acceptance gate, and only the customer's
+                                     * signature completes the engagement.
+                                     */
                                     target.value !==
-                                    'awaiting_baseline_approval',
+                                        'awaiting_baseline_approval' &&
+                                    target.value !==
+                                        'awaiting_final_acceptance' &&
+                                    target.value !== 'completed',
                             )
                             .map((target) =>
                                 target.value === 'archived' ? (

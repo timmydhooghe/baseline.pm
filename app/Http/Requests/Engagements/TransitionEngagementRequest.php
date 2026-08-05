@@ -4,6 +4,7 @@ namespace App\Http\Requests\Engagements;
 
 use App\Enums\BaselineStatus;
 use App\Enums\EngagementStatus;
+use App\Enums\FinalAcceptanceStatus;
 use App\Models\Engagement;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -37,8 +38,10 @@ class TransitionEngagementRequest extends FormRequest
 
     /**
      * Refuse moves the EngagementStatus state machine does not allow, and
-     * keep the road into baseline approval owned by the baseline builder:
-     * only submitting a baseline puts an engagement under review.
+     * keep the approval roads owned by their flows: only submitting a
+     * baseline puts an engagement under review, only submitting for final
+     * acceptance starts the acceptance gate, and only the customer's signed
+     * acceptance completes the engagement (FA-24).
      *
      * @return array<int, callable(Validator): void>
      */
@@ -65,6 +68,16 @@ class TransitionEngagementRequest extends FormRequest
                 if ($target === EngagementStatus::AwaitingBaselineApproval
                     && $engagement->baselines()->where('status', BaselineStatus::AwaitingApproval)->doesntExist()) {
                     $validator->errors()->add('status', __('Submit the baseline from the baseline builder to put it up for approval.'));
+                }
+
+                if ($target === EngagementStatus::AwaitingFinalAcceptance
+                    && $engagement->finalAcceptances()->where('status', FinalAcceptanceStatus::AwaitingResponse)->doesntExist()) {
+                    $validator->errors()->add('status', __('Submit for final acceptance from the engagement overview — the customer signs a frozen record.'));
+                }
+
+                if ($target === EngagementStatus::Completed
+                    && $engagement->finalAcceptances()->where('status', FinalAcceptanceStatus::Accepted)->doesntExist()) {
+                    $validator->errors()->add('status', __('Completion requires the customer\'s signed final acceptance.'));
                 }
             },
         ];
