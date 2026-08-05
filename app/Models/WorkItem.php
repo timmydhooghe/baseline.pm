@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\BaselineItemType;
+use App\Enums\ChangeRequestOrigin;
 use App\Enums\EstimateUnit;
 use App\Enums\IntegrationConnectionStatus;
 use App\Enums\WorkItemSource;
@@ -313,7 +314,7 @@ class WorkItem extends Model
                 'title' => $this->title,
                 'origin' => $origin,
             ]),
-            'origin' => 'drift',
+            'origin' => ChangeRequestOrigin::Drift,
             'estimated_days' => $this->effortDays(),
             'logged_seconds' => $this->loggedSeconds(),
             'work_started_at' => $this->workStartedAt(),

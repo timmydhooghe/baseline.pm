@@ -10,3 +10,4 @@ Artisan::command('inspire', function () {
 
 Schedule::command('horizon:snapshot')->everyFiveMinutes();
 Schedule::command('integrations:sync')->everyFifteenMinutes();
+Schedule::command('change-requests:remind')->hourly();

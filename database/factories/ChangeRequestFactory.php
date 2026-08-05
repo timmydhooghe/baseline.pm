@@ -32,4 +32,14 @@ class ChangeRequestFactory extends Factory
             'what' => fake()->paragraph(),
         ];
     }
+
+    /**
+     * Place the change request directly in the given status.
+     */
+    public function status(ChangeRequestStatus $status): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => $status,
+        ]);
+    }
 }

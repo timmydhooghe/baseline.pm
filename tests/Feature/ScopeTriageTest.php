@@ -2,6 +2,7 @@
 
 use App\Enums\BaselineItemType;
 use App\Enums\BaselineStatus;
+use App\Enums\ChangeRequestOrigin;
 use App\Enums\ChangeRequestStatus;
 use App\Enums\EngagementStatus;
 use App\Enums\EstimateUnit;
@@ -242,7 +243,7 @@ test('classifying as a potential change drafts a change request pre-filled from 
     expect($changeRequest->status)->toBe(ChangeRequestStatus::Draft)
         ->and($changeRequest->work_item_id)->toBe($item->id)
         ->and($changeRequest->engagement_id)->toBe($engagement->id)
-        ->and($changeRequest->origin)->toBe('drift')
+        ->and($changeRequest->origin)->toBe(ChangeRequestOrigin::Drift)
         ->and($changeRequest->title)->toContain($item->title)
         ->and($changeRequest->estimated_days)->toBe(2.0)
         ->and($changeRequest->logged_seconds)->toBe(4 * 3600)

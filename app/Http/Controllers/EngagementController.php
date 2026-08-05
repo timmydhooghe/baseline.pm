@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ChangeRequestStatus;
 use App\Enums\EngagementStatus;
 use App\Http\Requests\Engagements\StoreEngagementRequest;
 use App\Http\Requests\Engagements\TransitionEngagementRequest;
@@ -138,6 +139,15 @@ class EngagementController extends Controller
                         'lastSyncedAt' => $connection->last_synced_at?->diffForHumans(),
                     ])
                     ->values(),
+            ],
+            'changeControl' => [
+                'total' => $engagement->changeRequests()->count(),
+                'open' => $engagement->changeRequests()
+                    ->whereNotIn('status', [ChangeRequestStatus::Approved, ChangeRequestStatus::Rejected])
+                    ->count(),
+                'awaiting' => $engagement->changeRequests()
+                    ->where('status', ChangeRequestStatus::AwaitingApproval)
+                    ->count(),
             ],
             'lifecycle' => collect(EngagementStatus::cases())
                 ->map(fn (EngagementStatus $status): array => [

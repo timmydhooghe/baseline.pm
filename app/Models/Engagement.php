@@ -274,6 +274,35 @@ class Engagement extends Model
     }
 
     /**
+     * Raise a change request by hand (FA-11): a steering call, an email or
+     * another channel surfaced a change that never touched the triage inbox.
+     * Drift-born drafts come from WorkItem::triage() instead.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    public function draftChangeRequest(array $attributes, ?User $author = null): ChangeRequest
+    {
+        if ($this->status === EngagementStatus::Archived) {
+            throw ValidationException::withMessages([
+                'title' => __('Archived engagements are read-only.'),
+            ]);
+        }
+
+        $changeRequest = new ChangeRequest([...$attributes, 'created_by' => $author?->id]);
+        $changeRequest->organization_id = $this->organization_id;
+        $changeRequest->engagement_id = $this->id;
+        $changeRequest->save();
+
+        AuditLog::record('change_request.drafted', $changeRequest, [
+            'title' => $changeRequest->title,
+            'origin' => $changeRequest->origin?->value,
+            'drafted_by' => $author?->name,
+        ]);
+
+        return $changeRequest;
+    }
+
+    /**
      * @return BelongsTo<Customer, $this>
      */
     public function customer(): BelongsTo

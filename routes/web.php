@@ -5,6 +5,10 @@ use App\Http\Controllers\BaselineCommercialController;
 use App\Http\Controllers\BaselineController;
 use App\Http\Controllers\BaselineDocumentController;
 use App\Http\Controllers\BaselineItemController;
+use App\Http\Controllers\ChangeRequestAssessmentController;
+use App\Http\Controllers\ChangeRequestController;
+use App\Http\Controllers\ChangeRequestProposalController;
+use App\Http\Controllers\ChangeRequestSubmissionController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\EngagementController;
 use App\Http\Controllers\IntegrationAccountController;
@@ -12,6 +16,7 @@ use App\Http\Controllers\IntegrationConnectionController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\OrganizationController;
+use App\Http\Controllers\PortalChangeRequestController;
 use App\Http\Controllers\RateCardController;
 use App\Http\Controllers\StakeholderController;
 use App\Http\Controllers\TriageController;
@@ -57,6 +62,15 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('engagements/{engagement}/triage', [TriageController::class, 'show'])->name('engagements.triage.show');
     Route::post('work-items/{workItem}/triage', [WorkItemTriageController::class, 'store'])->name('work-items.triage.store');
 
+    Route::get('engagements/{engagement}/change-requests', [ChangeRequestController::class, 'index'])->name('engagements.change-requests.index');
+    Route::post('engagements/{engagement}/change-requests', [ChangeRequestController::class, 'store'])->name('engagements.change-requests.store');
+    Route::get('change-requests/{changeRequest}', [ChangeRequestController::class, 'show'])->name('change-requests.show');
+    Route::patch('change-requests/{changeRequest}', [ChangeRequestController::class, 'update'])->name('change-requests.update');
+    Route::post('change-requests/{changeRequest}/transition', [ChangeRequestController::class, 'transition'])->name('change-requests.transition');
+    Route::put('change-requests/{changeRequest}/assessment', [ChangeRequestAssessmentController::class, 'update'])->name('change-requests.assessment.update');
+    Route::put('change-requests/{changeRequest}/proposal', [ChangeRequestProposalController::class, 'update'])->name('change-requests.proposal.update');
+    Route::post('change-requests/{changeRequest}/submit', [ChangeRequestSubmissionController::class, 'store'])->name('change-requests.submit');
+
     Route::get('customers', [CustomerController::class, 'index'])->name('customers.index');
     Route::post('customers', [CustomerController::class, 'store'])->name('customers.store');
     Route::get('customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
@@ -92,11 +106,20 @@ Route::middleware('guest')->group(function (): void {
 });
 
 /*
- * Stakeholder portal. Protected portal routes will use the `stakeholder`
- * guard (magic-link / signed-URL login) once the portal work lands.
+ * Stakeholder portal. Change request review runs on personally signed links
+ * from the approver notifications — the signature covers the stakeholder
+ * parameter, so identity cannot be swapped. The full portal (stakeholder
+ * guard, shared records) lands with FA-27.
  */
 Route::prefix('portal')->name('portal.')->group(function (): void {
     Route::inertia('/', 'portal/welcome')->name('welcome');
+
+    Route::middleware('signed')->group(function (): void {
+        Route::get('change-requests/{changeRequest}/review/{stakeholder}', [PortalChangeRequestController::class, 'show'])->name('change-requests.show');
+        Route::post('change-requests/{changeRequest}/review/{stakeholder}', [PortalChangeRequestController::class, 'store'])
+            ->middleware('throttle:10,1')
+            ->name('change-requests.respond');
+    });
 });
 
 require __DIR__.'/settings.php';

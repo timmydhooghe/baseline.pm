@@ -1,7 +1,9 @@
 <?php
 
+use App\Enums\ChangeRequestStatus;
 use App\Enums\UserRole;
 use App\Models\AuditLog;
+use App\Models\ChangeRequest;
 use App\Models\Customer;
 use App\Models\Engagement;
 use App\Models\IntegrationAccount;
@@ -107,6 +109,27 @@ test('every executing role maps work, portfolio viewers only look at it', functi
     'member' => [UserRole::Member, true],
     'portfolio viewer' => [UserRole::PortfolioViewer, false],
 ]);
+
+test('change control is governed by managing roles only', function (UserRole $role, bool $allowed) {
+    $user = User::factory()->role($role)->create();
+    $engagement = Engagement::factory()->for($user->organization)->create();
+    $changeRequest = ChangeRequest::factory()->for($user->organization)->for($engagement)->create();
+
+    expect(Gate::forUser($user)->allows('view', $changeRequest))->toBeTrue()
+        ->and(Gate::forUser($user)->allows('create', [ChangeRequest::class, $engagement]))->toBe($allowed)
+        ->and(Gate::forUser($user)->allows('update', $changeRequest))->toBe($allowed)
+        ->and(Gate::forUser($user)->allows('delete', $changeRequest))->toBeFalse();
+})->with($everyRole);
+
+test('a decided change request cannot be updated even by managers', function () {
+    $manager = User::factory()->role(UserRole::DeliveryManager)->create();
+    $changeRequest = ChangeRequest::factory()
+        ->for($manager->organization)
+        ->status(ChangeRequestStatus::Approved)
+        ->create();
+
+    expect(Gate::forUser($manager)->allows('update', $changeRequest))->toBeFalse();
+});
 
 test('drift triage is a governance call for managing roles only', function (UserRole $role, bool $allowed) {
     $user = User::factory()->role($role)->create();

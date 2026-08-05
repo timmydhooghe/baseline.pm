@@ -19,6 +19,7 @@ import {
     show as engagementShow,
 } from '@/routes/engagements';
 import { show as baselineShow } from '@/routes/engagements/baseline';
+import { index as changeRequestsIndex } from '@/routes/engagements/change-requests';
 import { show as workShow } from '@/routes/engagements/work';
 import type {
     BaselineStatus,
@@ -45,10 +46,17 @@ type BaselineSummary = {
     statusLabel: string;
 };
 
+type ChangeControlSummary = {
+    total: number;
+    open: number;
+    awaiting: number;
+};
+
 type Props = {
     engagement: EngagementDetail;
     baseline: BaselineSummary | null;
     work: EngagementWorkSummary;
+    changeControl: ChangeControlSummary;
     lifecycle: SelectOption[];
     position: EngagementPositionSummary;
     can: { transition: boolean; viewCustomer: boolean };
@@ -58,6 +66,7 @@ export default function EngagementsShow({
     engagement,
     baseline,
     work,
+    changeControl,
     lifecycle,
     position,
     can,
@@ -268,6 +277,57 @@ export default function EngagementsShow({
                         >
                             <Link href={workShow(engagement.id)} prefetch>
                                 Open work →
+                            </Link>
+                        </Button>
+                    </div>
+                </div>
+
+                <div className="border-[1.5px] border-ink dark:border-paper">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b-[1.5px] border-ink px-4 py-3 dark:border-paper">
+                        <span className="font-plex-mono text-[11px] font-semibold tracking-[0.08em] text-stone uppercase dark:text-fog">
+                            Change control
+                        </span>
+                        {changeControl.total > 0 && (
+                            <span className="font-plex-mono text-[11px] font-semibold uppercase">
+                                {changeControl.open} open
+                                {changeControl.awaiting > 0 &&
+                                    ` · ${changeControl.awaiting} awaiting decision`}
+                            </span>
+                        )}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                        <p className="max-w-xl text-[13px] text-stone dark:text-fog">
+                            {changeControl.total === 0 &&
+                                'Every change to the approved baseline travels through a structured request: assessed effort, a priced proposal, an immutable customer decision.'}
+                            {changeControl.total > 0 &&
+                                changeControl.awaiting === 0 &&
+                                `${changeControl.total} change ${changeControl.total === 1 ? 'request' : 'requests'} on record.`}
+                            {changeControl.awaiting > 0 && (
+                                <>
+                                    {changeControl.total} change{' '}
+                                    {changeControl.total === 1
+                                        ? 'request'
+                                        : 'requests'}
+                                    ,{' '}
+                                    <span className="font-semibold text-rust">
+                                        {changeControl.awaiting} frozen for
+                                        customer decision
+                                    </span>
+                                    .
+                                </>
+                            )}
+                        </p>
+                        <Button
+                            asChild
+                            variant="outline"
+                            className="rounded-none border-[1.5px] border-ink font-semibold shadow-none dark:border-paper"
+                            data-test="open-change-requests-button"
+                        >
+                            <Link
+                                href={changeRequestsIndex(engagement.id)}
+                                prefetch
+                            >
+                                Open change control →
                             </Link>
                         </Button>
                     </div>

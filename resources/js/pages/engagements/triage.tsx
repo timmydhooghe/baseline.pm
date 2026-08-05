@@ -1,4 +1,4 @@
-import { Form, Head, setLayoutProps } from '@inertiajs/react';
+import { Form, Head, Link, setLayoutProps } from '@inertiajs/react';
 import { useState } from 'react';
 import WorkItemTriageController from '@/actions/App/Http/Controllers/WorkItemTriageController';
 import InputError from '@/components/input-error';
@@ -20,6 +20,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { show as changeRequestShow } from '@/routes/change-requests';
 import {
     index as engagements,
     show as engagementShow,
@@ -484,11 +485,21 @@ export default function EngagementsTriage({
                                                         null && (
                                                         <span className="flex flex-wrap items-center gap-2">
                                                             <span>
-                                                                {
-                                                                    item
-                                                                        .changeRequest
-                                                                        .title
-                                                                }{' '}
+                                                                <Link
+                                                                    href={changeRequestShow(
+                                                                        item
+                                                                            .changeRequest
+                                                                            .id,
+                                                                    )}
+                                                                    prefetch
+                                                                    className="font-medium hover:text-rust"
+                                                                >
+                                                                    {
+                                                                        item
+                                                                            .changeRequest
+                                                                            .title
+                                                                    }
+                                                                </Link>{' '}
                                                                 <span className="text-stone dark:text-fog">
                                                                     (
                                                                     {
