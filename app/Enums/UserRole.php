@@ -43,4 +43,17 @@ enum UserRole: string
             self::DeliveryManager, self::Member, self::PortfolioViewer => false,
         };
     }
+
+    /**
+     * Whether this role records execution updates and maps work to
+     * deliverables (FA-1): everyone who delivers, so members included —
+     * only portfolio viewers stay read-only.
+     */
+    public function updatesExecution(): bool
+    {
+        return match ($this) {
+            self::Owner, self::DeliveryManager, self::CommercialManager, self::Member => true,
+            self::PortfolioViewer => false,
+        };
+    }
 }

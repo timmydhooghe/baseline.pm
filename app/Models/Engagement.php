@@ -4,6 +4,10 @@ namespace App\Models;
 
 use App\Enums\BaselineStatus;
 use App\Enums\EngagementStatus;
+use App\Enums\IntegrationConnectionStatus;
+use App\Enums\IntegrationProvider;
+use App\Enums\WorkItemSource;
+use App\Jobs\SyncIntegrationConnection;
 use App\Models\Concerns\BelongsToOrganization;
 use App\Models\Concerns\RecordsAuditLog;
 use Database\Factories\EngagementFactory;
@@ -34,6 +38,9 @@ use LogicException;
  * @property-read Organization $organization
  * @property-read Customer $customer
  * @property-read Collection<int, Baseline> $baselines
+ * @property-read Collection<int, IntegrationConnection> $integrationConnections
+ * @property-read Collection<int, WorkItem> $workItems
+ * @property-read Collection<int, Release> $releases
  */
 #[Fillable(['name'])]
 class Engagement extends Model
@@ -154,6 +161,100 @@ class Engagement extends Model
     }
 
     /**
+     * The baseline execution work maps against: the approved version when
+     * one exists, otherwise the one being drafted.
+     */
+    public function currentBaseline(): ?Baseline
+    {
+        return $this->approvedBaseline() ?? $this->openBaseline();
+    }
+
+    /**
+     * Connect an execution tool, or reconnect a previously disconnected one
+     * — the retained history resyncs instead of starting over (FA-7). The
+     * first sync is queued immediately.
+     *
+     * @param  array<string, string>  $credentials
+     */
+    public function connectIntegration(
+        IntegrationProvider $provider,
+        array $credentials,
+        string $externalProjectKey,
+        ?string $baseUrl = null,
+        ?User $actor = null,
+    ): IntegrationConnection {
+        if ($this->status === EngagementStatus::Archived) {
+            throw ValidationException::withMessages([
+                'provider' => __('Archived engagements are read-only.'),
+            ]);
+        }
+
+        $existing = $this->integrationConnections()->firstWhere('provider', $provider);
+
+        if ($existing?->status === IntegrationConnectionStatus::Connected) {
+            throw ValidationException::withMessages([
+                'provider' => __(':provider is already connected to this engagement.', ['provider' => $provider->label()]),
+            ]);
+        }
+
+        if ($existing !== null) {
+            $existing->base_url = $baseUrl;
+            $existing->external_project_key = $externalProjectKey;
+            $existing->reconnect($credentials, $actor);
+
+            return $existing;
+        }
+
+        $connection = new IntegrationConnection([
+            'provider' => $provider,
+            'credentials' => $credentials,
+            'base_url' => $baseUrl,
+            'external_project_key' => $externalProjectKey,
+            'connected_by' => $actor?->id,
+            'connected_at' => now(),
+        ]);
+        $connection->organization_id = $this->organization_id;
+        $connection->engagement_id = $this->id;
+        $connection->save();
+
+        AuditLog::record('integration.connected', $connection, [
+            'provider' => $provider->value,
+            'external_project_key' => $externalProjectKey,
+        ]);
+
+        SyncIntegrationConnection::dispatch($connection);
+
+        return $connection;
+    }
+
+    /**
+     * Record a work item by hand — the standalone execution mode (FA-4).
+     * Manual items live alongside synced ones, so an engagement can upgrade
+     * to an integration later without losing its history.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    public function addManualWorkItem(array $attributes, ?User $author = null): WorkItem
+    {
+        if ($this->status === EngagementStatus::Archived) {
+            throw ValidationException::withMessages([
+                'title' => __('Archived engagements are read-only.'),
+            ]);
+        }
+
+        $workItem = new WorkItem([...$attributes, 'source' => WorkItemSource::Manual, 'created_by' => $author?->id]);
+        $workItem->organization_id = $this->organization_id;
+        $workItem->engagement_id = $this->id;
+        $workItem->save();
+
+        AuditLog::record('work_item.recorded', $workItem, [
+            'title' => $workItem->title,
+        ]);
+
+        return $workItem;
+    }
+
+    /**
      * @return BelongsTo<Customer, $this>
      */
     public function customer(): BelongsTo
@@ -167,6 +268,30 @@ class Engagement extends Model
     public function baselines(): HasMany
     {
         return $this->hasMany(Baseline::class);
+    }
+
+    /**
+     * @return HasMany<IntegrationConnection, $this>
+     */
+    public function integrationConnections(): HasMany
+    {
+        return $this->hasMany(IntegrationConnection::class);
+    }
+
+    /**
+     * @return HasMany<WorkItem, $this>
+     */
+    public function workItems(): HasMany
+    {
+        return $this->hasMany(WorkItem::class);
+    }
+
+    /**
+     * @return HasMany<Release, $this>
+     */
+    public function releases(): HasMany
+    {
+        return $this->hasMany(Release::class);
     }
 
     /**

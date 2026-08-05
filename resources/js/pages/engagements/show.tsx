@@ -19,7 +19,13 @@ import {
     show as engagementShow,
 } from '@/routes/engagements';
 import { show as baselineShow } from '@/routes/engagements/baseline';
-import type { BaselineStatus, EngagementStatus, SelectOption } from '@/types';
+import { show as workShow } from '@/routes/engagements/work';
+import type {
+    BaselineStatus,
+    EngagementStatus,
+    EngagementWorkSummary,
+    SelectOption,
+} from '@/types';
 
 type EngagementDetail = {
     id: string;
@@ -41,6 +47,7 @@ type BaselineSummary = {
 type Props = {
     engagement: EngagementDetail;
     baseline: BaselineSummary | null;
+    work: EngagementWorkSummary;
     lifecycle: SelectOption[];
     can: { transition: boolean; viewCustomer: boolean };
 };
@@ -48,6 +55,7 @@ type Props = {
 export default function EngagementsShow({
     engagement,
     baseline,
+    work,
     lifecycle,
     can,
 }: Props) {
@@ -201,6 +209,61 @@ export default function EngagementsShow({
                                         can.transition
                                       ? 'Continue in builder →'
                                       : 'View baseline →'}
+                            </Link>
+                        </Button>
+                    </div>
+                </div>
+
+                <div className="border-[1.5px] border-ink dark:border-paper">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b-[1.5px] border-ink px-4 py-3 dark:border-paper">
+                        <span className="font-plex-mono text-[11px] font-semibold tracking-[0.08em] text-stone uppercase dark:text-fog">
+                            Execution work
+                        </span>
+                        <span className="font-plex-mono text-[11px] font-semibold uppercase">
+                            {work.connections.length === 0
+                                ? 'Standalone'
+                                : work.connections
+                                      .map(
+                                          (connection) =>
+                                              `${connection.providerLabel} · ${
+                                                  connection.status ===
+                                                  'connected'
+                                                      ? connection.lastSyncedAt ===
+                                                        null
+                                                          ? 'sync queued'
+                                                          : `synced ${connection.lastSyncedAt}`
+                                                      : 'disconnected'
+                                              }`,
+                                      )
+                                      .join(' / ')}
+                        </span>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                        <p className="max-w-xl text-[13px] text-stone dark:text-fog">
+                            {work.itemCount === 0 &&
+                                'Sync Jira or Linear — or record work manually — and map every item to a deliverable. Unmapped work is potential scope creep.'}
+                            {work.itemCount > 0 &&
+                                work.unlinkedCount === 0 &&
+                                `${work.itemCount} work ${work.itemCount === 1 ? 'item' : 'items'}, all mapped to deliverables.`}
+                            {work.itemCount > 0 && work.unlinkedCount > 0 && (
+                                <>
+                                    {work.itemCount} work{' '}
+                                    {work.itemCount === 1 ? 'item' : 'items'},{' '}
+                                    <span className="font-semibold text-rust">
+                                        {work.unlinkedCount} unmapped
+                                    </span>{' '}
+                                    — potential scope creep.
+                                </>
+                            )}
+                        </p>
+                        <Button
+                            asChild
+                            variant="outline"
+                            className="rounded-none border-[1.5px] border-ink font-semibold shadow-none dark:border-paper"
+                            data-test="open-work-button"
+                        >
+                            <Link href={workShow(engagement.id)} prefetch>
+                                Open work →
                             </Link>
                         </Button>
                     </div>

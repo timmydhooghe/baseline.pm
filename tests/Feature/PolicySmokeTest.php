@@ -4,10 +4,12 @@ use App\Enums\UserRole;
 use App\Models\AuditLog;
 use App\Models\Customer;
 use App\Models\Engagement;
+use App\Models\IntegrationConnection;
 use App\Models\Invitation;
 use App\Models\Snapshot;
 use App\Models\Stakeholder;
 use App\Models\User;
+use App\Models\WorkItem;
 use Illuminate\Support\Facades\Gate;
 
 $everyRole = [
@@ -87,6 +89,34 @@ test('only the owner manages invitations', function (UserRole $role, bool $allow
     'member' => [UserRole::Member, false],
     'portfolio viewer' => [UserRole::PortfolioViewer, false],
 ]);
+
+test('every executing role maps work, portfolio viewers only look at it', function (UserRole $role, bool $allowed) {
+    $user = User::factory()->role($role)->create();
+    $engagement = Engagement::factory()->for($user->organization)->create();
+    $workItem = WorkItem::factory()->for($user->organization)->for($engagement)->create();
+
+    expect(Gate::forUser($user)->allows('view', $workItem))->toBeTrue()
+        ->and(Gate::forUser($user)->allows('create', [WorkItem::class, $engagement]))->toBe($allowed)
+        ->and(Gate::forUser($user)->allows('linkAny', [WorkItem::class, $engagement]))->toBe($allowed)
+        ->and(Gate::forUser($user)->allows('link', $workItem))->toBe($allowed);
+})->with([
+    'owner' => [UserRole::Owner, true],
+    'delivery manager' => [UserRole::DeliveryManager, true],
+    'commercial manager' => [UserRole::CommercialManager, true],
+    'member' => [UserRole::Member, true],
+    'portfolio viewer' => [UserRole::PortfolioViewer, false],
+]);
+
+test('integrations are wired by managing roles and never deleted', function (UserRole $role, bool $allowed) {
+    $user = User::factory()->role($role)->create();
+    $engagement = Engagement::factory()->for($user->organization)->create();
+    $connection = IntegrationConnection::factory()->for($user->organization)->for($engagement)->create();
+
+    expect(Gate::forUser($user)->allows('create', [IntegrationConnection::class, $engagement]))->toBe($allowed)
+        ->and(Gate::forUser($user)->allows('disconnect', $connection))->toBe($allowed)
+        ->and(Gate::forUser($user)->allows('sync', $connection))->toBe($allowed)
+        ->and(Gate::forUser($user)->allows('delete', $connection))->toBeFalse();
+})->with($everyRole);
 
 test('audit logs and snapshots can never be mutated, even by the owner', function () {
     $owner = User::factory()->role(UserRole::Owner)->create();

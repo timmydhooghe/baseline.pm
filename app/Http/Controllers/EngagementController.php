@@ -7,6 +7,7 @@ use App\Http\Requests\Engagements\StoreEngagementRequest;
 use App\Http\Requests\Engagements\TransitionEngagementRequest;
 use App\Models\Customer;
 use App\Models\Engagement;
+use App\Models\IntegrationConnection;
 use App\Models\User;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -125,6 +126,18 @@ class EngagementController extends Controller
                 'version' => $baseline->version,
                 'status' => $baseline->status->value,
                 'statusLabel' => $baseline->status->label(),
+            ],
+            'work' => [
+                'itemCount' => $engagement->workItems()->count(),
+                'unlinkedCount' => $engagement->workItems()->whereDoesntHave('link')->count(),
+                'connections' => $engagement->integrationConnections
+                    ->map(fn (IntegrationConnection $connection): array => [
+                        'providerLabel' => $connection->provider->label(),
+                        'status' => $connection->status->value,
+                        'statusLabel' => $connection->status->label(),
+                        'lastSyncedAt' => $connection->last_synced_at?->diffForHumans(),
+                    ])
+                    ->values(),
             ],
             'lifecycle' => collect(EngagementStatus::cases())
                 ->map(fn (EngagementStatus $status): array => [

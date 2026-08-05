@@ -210,6 +210,22 @@ return [
             'timeout' => 60,
             'nice' => 0,
         ],
+
+        // Provider syncs get their own lane: third-party APIs are slow and
+        // flaky, so they retry and may run long without starving `default`.
+        'supervisor-integrations' => [
+            'connection' => 'redis',
+            'queue' => ['integrations'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 128,
+            'tries' => 3,
+            'timeout' => 120,
+            'nice' => 0,
+        ],
     ],
 
     'environments' => [
@@ -219,11 +235,17 @@ return [
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
+            'supervisor-integrations' => [
+                'maxProcesses' => 3,
+            ],
         ],
 
         'local' => [
             'supervisor-1' => [
                 'maxProcesses' => 3,
+            ],
+            'supervisor-integrations' => [
+                'maxProcesses' => 1,
             ],
         ],
     ],

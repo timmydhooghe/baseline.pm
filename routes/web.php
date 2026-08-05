@@ -7,11 +7,16 @@ use App\Http\Controllers\BaselineDocumentController;
 use App\Http\Controllers\BaselineItemController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\EngagementController;
+use App\Http\Controllers\IntegrationConnectionController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\RateCardController;
 use App\Http\Controllers\StakeholderController;
+use App\Http\Controllers\WorkController;
+use App\Http\Controllers\WorkItemController;
+use App\Http\Controllers\WorkItemLinkController;
+use App\Http\Controllers\WorkItemWorklogController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -36,6 +41,16 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('baselines/{baseline}/documents/{document}', [BaselineDocumentController::class, 'show'])->scopeBindings()->name('baselines.documents.show');
     Route::delete('baselines/{baseline}/documents/{document}', [BaselineDocumentController::class, 'destroy'])->scopeBindings()->name('baselines.documents.destroy');
     Route::put('baselines/{baseline}/commercials', [BaselineCommercialController::class, 'update'])->name('baselines.commercials.update');
+
+    Route::get('engagements/{engagement}/work', [WorkController::class, 'show'])->name('engagements.work.show');
+    Route::post('engagements/{engagement}/integrations', [IntegrationConnectionController::class, 'store'])->name('engagements.integrations.store');
+    Route::post('integrations/{connection}/disconnect', [IntegrationConnectionController::class, 'disconnect'])->name('integrations.disconnect');
+    Route::post('integrations/{connection}/sync', [IntegrationConnectionController::class, 'sync'])->name('integrations.sync');
+    Route::post('engagements/{engagement}/work-items', [WorkItemController::class, 'store'])->name('engagements.work-items.store');
+    Route::patch('work-items/{workItem}', [WorkItemController::class, 'update'])->name('work-items.update');
+    Route::post('work-items/{workItem}/worklogs', [WorkItemWorklogController::class, 'store'])->name('work-items.worklogs.store');
+    Route::post('engagements/{engagement}/work-item-links', [WorkItemLinkController::class, 'store'])->name('engagements.work-item-links.store');
+    Route::delete('work-items/{workItem}/link', [WorkItemLinkController::class, 'destroy'])->name('work-items.link.destroy');
 
     Route::get('customers', [CustomerController::class, 'index'])->name('customers.index');
     Route::post('customers', [CustomerController::class, 'store'])->name('customers.store');
