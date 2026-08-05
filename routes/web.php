@@ -6,6 +6,7 @@ use App\Http\Controllers\EngagementController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\OrganizationController;
+use App\Http\Controllers\RateCardController;
 use App\Http\Controllers\StakeholderController;
 use Illuminate\Support\Facades\Route;
 
@@ -30,6 +31,8 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::delete('stakeholders/{stakeholder}', [StakeholderController::class, 'destroy'])->name('stakeholders.destroy');
 
     Route::get('organization', [OrganizationController::class, 'show'])->name('organization.show');
+    Route::get('organization/rate-card', [RateCardController::class, 'show'])->name('organization.rate-card.show');
+    Route::post('organization/rate-card', [RateCardController::class, 'store'])->name('organization.rate-card.store');
     Route::patch('organization/members/{member}', [MemberController::class, 'update'])->name('organization.members.update');
     Route::delete('organization/members/{member}', [MemberController::class, 'destroy'])->name('organization.members.destroy');
     Route::post('organization/invitations', [InvitationController::class, 'store'])->name('organization.invitations.store');

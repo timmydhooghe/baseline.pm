@@ -31,4 +31,16 @@ enum UserRole: string
             self::Member, self::PortfolioViewer => false,
         };
     }
+
+    /**
+     * Whether this role publishes rate card versions. Rates are commercial
+     * terms, so delivery managers read them but don't set them.
+     */
+    public function managesRateCard(): bool
+    {
+        return match ($this) {
+            self::Owner, self::CommercialManager => true,
+            self::DeliveryManager, self::Member, self::PortfolioViewer => false,
+        };
+    }
 }

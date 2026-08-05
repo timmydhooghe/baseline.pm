@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\UserRole;
 use App\Models\Invitation;
+use App\Models\RateCardVersion;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -72,6 +73,7 @@ class OrganizationController extends Controller
                 ->values(),
             'can' => [
                 'manageMembers' => $managesMembers,
+                'viewRateCard' => $user->can('viewAny', RateCardVersion::class),
             ],
         ]);
     }

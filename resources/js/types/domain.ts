@@ -14,6 +14,12 @@ export type SelectOption = {
     label: string;
 };
 
+export type Money = {
+    amount: number;
+    currency: string;
+    formatted: string;
+};
+
 export type PlanUsage = {
     activeCount: number;
     limit: number | null;

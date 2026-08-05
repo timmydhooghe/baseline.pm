@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\EngagementStatus;
 use App\Enums\Plan;
 use App\Models\Concerns\RecordsAuditLog;
+use App\ValueObjects\Money;
 use Database\Factories\OrganizationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Collection;
@@ -13,6 +14,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * The tenant root. All tenant data hangs off an organization via organization_id.
@@ -27,6 +29,7 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, Stakeholder> $stakeholders
  * @property-read Collection<int, Engagement> $engagements
  * @property-read Collection<int, Invitation> $invitations
+ * @property-read Collection<int, RateCardVersion> $rateCardVersions
  */
 #[Fillable(['name'])]
 class Organization extends Model
@@ -81,6 +84,51 @@ class Organization extends Model
     public function invitations(): HasMany
     {
         return $this->hasMany(Invitation::class);
+    }
+
+    /**
+     * @return HasMany<RateCardVersion, $this>
+     */
+    public function rateCardVersions(): HasMany
+    {
+        return $this->hasMany(RateCardVersion::class);
+    }
+
+    /**
+     * The rate card version new baselines are priced with.
+     */
+    public function currentRateCardVersion(): ?RateCardVersion
+    {
+        return $this->rateCardVersions()->orderByDesc('version')->first();
+    }
+
+    /**
+     * Publish the next rate card version as a complete snapshot of role rates.
+     *
+     * @param  list<array{name: string, cost_per_day: Money, sell_per_day: Money}>  $roles
+     */
+    public function publishRateCardVersion(array $roles, ?User $publishedBy = null): RateCardVersion
+    {
+        return DB::transaction(function () use ($roles, $publishedBy): RateCardVersion {
+            $latestVersion = (int) $this->rateCardVersions()->lockForUpdate()->max('version');
+
+            $version = $this->rateCardVersions()->create([
+                'version' => $latestVersion + 1,
+                'created_by' => $publishedBy?->id,
+            ]);
+
+            foreach ($roles as $position => $role) {
+                $version->roles()->create([
+                    'organization_id' => $this->id,
+                    'name' => $role['name'],
+                    'cost_per_day' => $role['cost_per_day'],
+                    'sell_per_day' => $role['sell_per_day'],
+                    'position' => $position,
+                ]);
+            }
+
+            return $version;
+        });
     }
 
     /**
