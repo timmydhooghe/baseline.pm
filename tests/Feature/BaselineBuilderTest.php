@@ -21,8 +21,16 @@ function baselineDetailsPayload(): array
     ];
 }
 
+function publishBuilderRateCard(User $user): void
+{
+    $user->organization->publishRateCardVersion([
+        ['name' => 'Developer', 'cost_per_day' => Money::fromCents(45000), 'sell_per_day' => Money::fromCents(78000)],
+    ]);
+}
+
 test('a delivery manager starts a baseline draft from the details step', function () {
     $manager = User::factory()->role(UserRole::DeliveryManager)->create();
+    publishBuilderRateCard($manager);
     $engagement = Engagement::factory()->for($manager->organization)->create();
 
     $this->actingAs($manager)
@@ -163,8 +171,61 @@ test('the end date cannot precede the start date', function () {
         ->assertInvalid(['end_date']);
 });
 
+test('a baseline cannot start before a rate card is published', function () {
+    $manager = User::factory()->role(UserRole::DeliveryManager)->create();
+    $engagement = Engagement::factory()->for($manager->organization)->create();
+
+    $this->actingAs($manager)
+        ->post(route('engagements.baseline.store', $engagement), baselineDetailsPayload())
+        ->assertInvalid(['baseline']);
+
+    expect(Baseline::query()->count())->toBe(0)
+        ->and($engagement->refresh()->status)->toBe(EngagementStatus::Draft);
+});
+
+test('members and portfolio viewers never receive rates, cost or margin', function (UserRole $role) {
+    $manager = User::factory()->role(UserRole::DeliveryManager)->create();
+    publishBuilderRateCard($manager);
+    $engagement = Engagement::factory()->for($manager->organization)->status(EngagementStatus::PreparingBaseline)->create();
+
+    $this->actingAs($manager)->post(route('engagements.baseline.store', $engagement), baselineDetailsPayload());
+
+    $viewer = User::factory()->role($role)->for($manager->organization)->create();
+
+    $this->actingAs($viewer)
+        ->get(route('engagements.baseline.show', $engagement))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('engagements/baseline')
+            ->where('rateCard', null)
+            ->where('baseline.totals', null)
+            ->where('baseline.allocations', [])
+            ->where('can.viewCommercials', false)
+            ->where('can.manage', false));
+})->with([
+    'member' => UserRole::Member,
+    'portfolio viewer' => UserRole::PortfolioViewer,
+]);
+
+test('managers receive the rate card and derived totals', function () {
+    $manager = User::factory()->role(UserRole::DeliveryManager)->create();
+    publishBuilderRateCard($manager);
+    $engagement = Engagement::factory()->for($manager->organization)->status(EngagementStatus::PreparingBaseline)->create();
+
+    $this->actingAs($manager)->post(route('engagements.baseline.store', $engagement), baselineDetailsPayload());
+
+    $this->actingAs($manager)
+        ->get(route('engagements.baseline.show', $engagement))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('rateCard.version', 1)
+            ->where('rateCard.roles.0.costPerDay.amount', 45000)
+            ->where('baseline.totals.costBudget.amount', 0)
+            ->where('can.viewCommercials', true));
+});
+
 test('starting a baseline is recorded in the audit log', function () {
     $manager = User::factory()->role(UserRole::DeliveryManager)->create();
+    publishBuilderRateCard($manager);
     $engagement = Engagement::factory()->for($manager->organization)->create();
 
     $this->actingAs($manager)->post(route('engagements.baseline.store', $engagement), baselineDetailsPayload());

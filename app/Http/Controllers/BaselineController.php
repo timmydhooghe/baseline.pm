@@ -13,6 +13,7 @@ use App\Models\BaselineDocument;
 use App\Models\BaselineItem;
 use App\Models\Engagement;
 use App\Models\RateCardRole;
+use App\Models\RateCardVersion;
 use App\Models\User;
 use App\ValueObjects\Money;
 use Illuminate\Http\RedirectResponse;
@@ -26,8 +27,10 @@ class BaselineController extends Controller
     /**
      * The baseline builder wizard. Shows the open draft (or the submitted /
      * approved baseline read-only); before any baseline exists it opens on
-     * the details step. Commercials are internal-only — this page never
-     * renders for portal users.
+     * the details step. Rates, cost budget and margin follow the rate card
+     * policy: managers see them, members and portfolio viewers get the
+     * baseline with every commercial prop stripped — and the portal never
+     * renders this page at all.
      */
     public function show(Request $request, Engagement $engagement): Response
     {
@@ -35,6 +38,8 @@ class BaselineController extends Controller
 
         /** @var User $user */
         $user = $request->user();
+
+        $viewCommercials = $user->can('viewAny', RateCardVersion::class);
 
         $baseline = $engagement->openBaseline() ?? $engagement->approvedBaseline();
         $baseline?->load(['items.owner', 'allocations.role', 'documents.uploadedBy', 'rateCardVersion.roles']);
@@ -51,8 +56,8 @@ class BaselineController extends Controller
                 'statusLabel' => $engagement->status->label(),
                 'customerName' => $engagement->customer->name,
             ],
-            'baseline' => $baseline === null ? null : $this->baselineViewModel($baseline),
-            'rateCard' => $rateCardVersion === null ? null : [
+            'baseline' => $baseline === null ? null : $this->baselineViewModel($baseline, $viewCommercials),
+            'rateCard' => $viewCommercials && $rateCardVersion !== null ? [
                 'version' => $rateCardVersion->version,
                 'roles' => $rateCardVersion->roles
                     ->map(fn (RateCardRole $role): array => [
@@ -62,7 +67,7 @@ class BaselineController extends Controller
                         'sellPerDay' => $role->sell_per_day->toArray(),
                     ])
                     ->values(),
-            ],
+            ] : null,
             'members' => $user->organization->users()
                 ->orderBy('name')
                 ->get()
@@ -84,6 +89,7 @@ class BaselineController extends Controller
                 'manage' => $baseline === null
                     ? $user->can('create', [Baseline::class, $engagement])
                     : $user->can('update', $baseline),
+                'viewCommercials' => $viewCommercials,
             ],
         ]);
     }
@@ -119,13 +125,13 @@ class BaselineController extends Controller
     {
         $validated = $request->validated();
 
-        $baseline->update([
+        $baseline->mutateAsDraft(fn () => $baseline->update([
             'commercial_model' => $validated['commercial_model'],
             'contract_value' => self::eurosToMoney($validated['contract_value']),
             'start_date' => $validated['start_date'],
             'end_date' => $validated['end_date'],
             'execution_mode' => $validated['execution_mode'],
-        ]);
+        ]));
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Baseline details saved.')]);
 
@@ -170,13 +176,15 @@ class BaselineController extends Controller
     }
 
     /**
-     * The full wizard view model of a baseline, commercials included.
+     * The wizard view model of a baseline. Role-mix allocations and derived
+     * cost/margin totals are commercial data: they are only present when the
+     * viewer may read the rate card — otherwise the keys carry no data at
+     * all, mirroring how the customer snapshot is built.
      *
      * @return array<string, mixed>
      */
-    private function baselineViewModel(Baseline $baseline): array
+    private function baselineViewModel(Baseline $baseline, bool $withCommercials): array
     {
-        $budgets = $baseline->deliverableCostBudgets();
         $checks = $baseline->completenessChecks();
 
         return [
@@ -223,7 +231,7 @@ class BaselineController extends Controller
                     'paymentTrigger' => $item->payment_trigger,
                 ])
                 ->values(),
-            'allocations' => $baseline->allocations
+            'allocations' => ! $withCommercials ? [] : $baseline->allocations
                 ->map(fn (BaselineAllocation $allocation): array => [
                     'id' => $allocation->id,
                     'baselineItemId' => $allocation->baseline_item_id,
@@ -231,11 +239,11 @@ class BaselineController extends Controller
                     'days' => $allocation->days,
                 ])
                 ->values(),
-            'totals' => [
+            'totals' => ! $withCommercials ? null : [
                 'costBudget' => $baseline->costBudget()->toArray(),
                 'deliveryManagementCost' => $baseline->deliveryManagementCost()->toArray(),
                 'plannedMargin' => $baseline->plannedMargin()->toArray(),
-                'deliverableBudgets' => collect($budgets)->map(fn (array $budget): array => [
+                'deliverableBudgets' => collect($baseline->deliverableCostBudgets())->map(fn (array $budget): array => [
                     'direct' => $budget['direct']->toArray(),
                     'budget' => $budget['budget']->toArray(),
                 ]),

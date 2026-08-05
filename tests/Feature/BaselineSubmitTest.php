@@ -14,6 +14,7 @@ use App\Models\Snapshot;
 use App\Models\Stakeholder;
 use App\Models\User;
 use App\ValueObjects\Money;
+use Illuminate\Validation\ValidationException;
 
 /**
  * A manager with a baseline that passes every completeness check: two valued
@@ -176,6 +177,34 @@ test('members cannot submit a baseline', function () {
     $baseline = Baseline::factory()->for($member->organization)->create();
 
     $this->actingAs($member)->post(route('baselines.submit', $baseline))->assertForbidden();
+});
+
+test('submission freezes the latest committed draft state, not cached reads', function () {
+    [$manager, $baseline] = submittableBaseline();
+
+    // Warm this instance's relation cache the way a long-lived request would.
+    $baseline->completenessChecks();
+
+    // Another editor commits a rename through a different model instance.
+    BaselineItem::query()->where('title', 'Checkout flow')->sole()->update(['title' => 'Checkout journey']);
+
+    $baseline->submitForApproval($manager);
+
+    $titles = collect($baseline->reviewSnapshot?->payload['items'] ?? [])->pluck('title');
+
+    expect($titles)->toContain('Checkout journey')
+        ->and($titles)->not->toContain('Checkout flow');
+});
+
+test('a stale editor cannot mutate a baseline that left draft', function () {
+    [$manager, $baseline] = submittableBaseline();
+
+    $stale = Baseline::query()->findOrFail($baseline->id);
+
+    $this->actingAs($manager)->post(route('baselines.submit', $baseline));
+
+    expect($stale->status)->toBe(BaselineStatus::Draft)
+        ->and(fn () => $stale->mutateAsDraft(fn () => null))->toThrow(ValidationException::class);
 });
 
 test('a submitted baseline is frozen at the model level', function () {

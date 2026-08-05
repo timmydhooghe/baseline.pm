@@ -23,12 +23,12 @@ class BaselineItemController extends Controller
         $validated = $request->validated();
         $type = BaselineItemType::from($validated['type']);
 
-        $baseline->items()->create([
+        $baseline->mutateAsDraft(fn () => $baseline->items()->create([
             'organization_id' => $baseline->organization_id,
             'type' => $type,
             'position' => (int) $baseline->items()->where('type', $type)->max('position') + 1,
             ...self::itemAttributes($type, $validated),
-        ]);
+        ]));
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __(':type added.', ['type' => $type->label()])]);
 
@@ -40,7 +40,9 @@ class BaselineItemController extends Controller
      */
     public function update(UpdateBaselineItemRequest $request, Baseline $baseline, BaselineItem $item): RedirectResponse
     {
-        $item->update(self::itemAttributes($item->type, $request->validated()));
+        $validated = $request->validated();
+
+        $baseline->mutateAsDraft(fn () => $item->update(self::itemAttributes($item->type, $validated)));
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __(':type saved.', ['type' => $item->type->label()])]);
 
@@ -54,7 +56,7 @@ class BaselineItemController extends Controller
     {
         Gate::authorize('update', $baseline);
 
-        $item->delete();
+        $baseline->mutateAsDraft(fn () => $item->delete());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __(':type removed.', ['type' => $item->type->label()])]);
 

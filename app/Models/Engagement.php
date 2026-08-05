@@ -131,11 +131,24 @@ class Engagement extends Model
                 ]);
             }
 
+            /*
+             * Without a published rate card the pinned version would stay
+             * null forever and the draft could never be priced — commercials
+             * validate roles against the pinned version only.
+             */
+            $rateCardVersion = $this->organization->currentRateCardVersion();
+
+            if ($rateCardVersion === null) {
+                throw ValidationException::withMessages([
+                    'baseline' => __('Publish a rate card before drafting a baseline — cost budgets derive from the version pinned at creation.'),
+                ]);
+            }
+
             $baseline = new Baseline([...$attributes, 'created_by' => $author?->id]);
             $baseline->organization_id = $this->organization_id;
             $baseline->engagement_id = $this->id;
             $baseline->version = (int) $this->baselines()->max('version') + 1;
-            $baseline->rate_card_version_id = $this->organization->currentRateCardVersion()?->id;
+            $baseline->rate_card_version_id = $rateCardVersion->id;
             $baseline->save();
 
             if ($this->status === EngagementStatus::Draft) {

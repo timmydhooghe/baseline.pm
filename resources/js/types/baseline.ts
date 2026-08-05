@@ -81,7 +81,7 @@ export type BaselineView = {
         deliveryManagementCost: Money;
         plannedMargin: Money;
         deliverableBudgets: Record<string, { direct: Money; budget: Money }>;
-    };
+    } | null;
     checks: CompletenessCheckView[];
     canSubmit: boolean;
 };

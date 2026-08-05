@@ -1,4 +1,5 @@
 import { formatBytes } from '@/components/baseline-step-contract';
+import { cn } from '@/lib/utils';
 import type { BaselineItemType, BaselineView, SelectOption } from '@/types';
 
 type Props = {
@@ -142,7 +143,12 @@ export default function BaselineReview({
                 );
             })}
 
-            <div className="grid gap-0 border-[1.5px] border-ink sm:grid-cols-3 dark:border-paper">
+            <div
+                className={cn(
+                    'grid gap-0 border-[1.5px] border-ink dark:border-paper',
+                    baseline.totals !== null && 'sm:grid-cols-3',
+                )}
+            >
                 <div className="border-ink/20 px-4 py-3 sm:border-r dark:border-paper/20">
                     <div className={sectionLabel}>Deliverable values</div>
                     <div className="mt-1 font-plex-mono text-[16px] font-bold">
@@ -152,20 +158,26 @@ export default function BaselineReview({
                         })}
                     </div>
                 </div>
-                <div className="border-ink/20 px-4 py-3 sm:border-r dark:border-paper/20">
-                    <div className={sectionLabel}>Cost budget — internal</div>
-                    <div className="mt-1 font-plex-mono text-[16px] font-bold">
-                        {baseline.totals.costBudget.formatted}
-                    </div>
-                </div>
-                <div className="px-4 py-3">
-                    <div className={sectionLabel}>
-                        Planned margin — internal
-                    </div>
-                    <div className="mt-1 font-plex-mono text-[16px] font-bold">
-                        {baseline.totals.plannedMargin.formatted}
-                    </div>
-                </div>
+                {baseline.totals !== null && (
+                    <>
+                        <div className="border-ink/20 px-4 py-3 sm:border-r dark:border-paper/20">
+                            <div className={sectionLabel}>
+                                Cost budget — internal
+                            </div>
+                            <div className="mt-1 font-plex-mono text-[16px] font-bold">
+                                {baseline.totals.costBudget.formatted}
+                            </div>
+                        </div>
+                        <div className="px-4 py-3">
+                            <div className={sectionLabel}>
+                                Planned margin — internal
+                            </div>
+                            <div className="mt-1 font-plex-mono text-[16px] font-bold">
+                                {baseline.totals.plannedMargin.formatted}
+                            </div>
+                        </div>
+                    </>
+                )}
             </div>
         </div>
     );

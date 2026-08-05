@@ -5,6 +5,7 @@ use App\Enums\UserRole;
 use App\Models\Baseline;
 use App\Models\BaselineAllocation;
 use App\Models\BaselineItem;
+use App\Models\Organization;
 use App\Models\RateCardVersion;
 use App\Models\User;
 use App\ValueObjects\Money;
@@ -185,6 +186,41 @@ test('saving again replaces the whole role mix', function () {
 
     expect($allocations)->toHaveCount(1)
         ->and($allocations->first()?->rate_card_role_id)->toBe($designer->id);
+});
+
+test('very large budgets allocate pro-rata without integer overflow', function () {
+    $organization = Organization::factory()->create();
+    $version = $organization->publishRateCardVersion([
+        ['name' => 'Program director', 'cost_per_day' => Money::fromCents(100000000), 'sell_per_day' => Money::fromCents(150000000)],
+    ]);
+    $role = $version->roles()->sole();
+
+    $baseline = Baseline::factory()->for($organization)->create([
+        'rate_card_version_id' => $version->id,
+        'contract_value' => Money::fromCents(10000000000),
+    ]);
+
+    $first = BaselineItem::factory()->for($organization)->for($baseline)->create(['position' => 1]);
+    $second = BaselineItem::factory()->for($organization)->for($baseline)->create(['position' => 2]);
+
+    foreach ([[$first->id, '50'], [$second->id, '50'], [null, '50']] as [$itemId, $days]) {
+        BaselineAllocation::factory()->for($organization)->for($baseline)->create([
+            'baseline_item_id' => $itemId,
+            'rate_card_role_id' => $role->id,
+            'days' => $days,
+        ]);
+    }
+
+    /*
+     * €50M direct per deliverable and €50M delivery management (50 days at
+     * €1M/day cost each): the naive cents × cents product would overflow
+     * 64-bit integers. Management splits 1:1, and the shares stay exact.
+     */
+    $budgets = $baseline->load('allocations.role')->deliverableCostBudgets();
+
+    expect($budgets[$first->id]['budget']->amount)->toBe(7500000000)
+        ->and($budgets[$second->id]['budget']->amount)->toBe(7500000000)
+        ->and($baseline->costBudget()->amount)->toBe(15000000000);
 });
 
 test('the role mix is frozen once the baseline is submitted', function () {

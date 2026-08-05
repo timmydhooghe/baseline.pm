@@ -25,20 +25,22 @@ class BaselineDocumentController extends Controller
         /** @var UploadedFile $file */
         $file = $request->file('document');
 
-        $path = $file->store("baselines/{$baseline->id}/contracts", 'local');
+        $baseline->mutateAsDraft(function () use ($request, $baseline, $file): void {
+            $path = $file->store("baselines/{$baseline->id}/contracts", 'local');
 
-        if ($path === false) {
-            abort(500, 'The contract document could not be stored.');
-        }
+            if ($path === false) {
+                abort(500, 'The contract document could not be stored.');
+            }
 
-        $baseline->documents()->create([
-            'organization_id' => $baseline->organization_id,
-            'filename' => $file->getClientOriginalName(),
-            'path' => $path,
-            'mime_type' => $file->getMimeType(),
-            'size_bytes' => $file->getSize(),
-            'uploaded_by' => $request->user()?->id,
-        ]);
+            $baseline->documents()->create([
+                'organization_id' => $baseline->organization_id,
+                'filename' => $file->getClientOriginalName(),
+                'path' => $path,
+                'mime_type' => $file->getMimeType(),
+                'size_bytes' => $file->getSize(),
+                'uploaded_by' => $request->user()?->id,
+            ]);
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __(':filename uploaded.', [
             'filename' => $file->getClientOriginalName(),
@@ -66,7 +68,7 @@ class BaselineDocumentController extends Controller
     {
         Gate::authorize('update', $baseline);
 
-        $document->delete();
+        $baseline->mutateAsDraft(fn () => $document->delete());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __(':filename removed.', [
             'filename' => $document->filename,

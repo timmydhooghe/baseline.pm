@@ -7,12 +7,14 @@ import BaselineStepContract from '@/components/baseline-step-contract';
 import BaselineStepDetails from '@/components/baseline-step-details';
 import BaselineStepStructure from '@/components/baseline-step-structure';
 import BaselineStepSubmit from '@/components/baseline-step-submit';
+import TextLink from '@/components/text-link';
 import { cn } from '@/lib/utils';
 import {
     index as engagements,
     show as engagementShow,
 } from '@/routes/engagements';
 import { show as baselineShow } from '@/routes/engagements/baseline';
+import { show as rateCardShow } from '@/routes/organization/rate-card';
 import type {
     BaselineMemberOption,
     BaselineRateCardView,
@@ -34,7 +36,7 @@ type Props = {
     members: BaselineMemberOption[];
     commercialModels: SelectOption[];
     executionModes: SelectOption[];
-    can: { manage: boolean };
+    can: { manage: boolean; viewCommercials: boolean };
 };
 
 const STEPS = [
@@ -127,6 +129,19 @@ export default function EngagementsBaseline({
                             — baseline v{baseline.version} is immutable. Every
                             change now goes through a change request, which
                             creates the next version.
+                        </span>
+                    </div>
+                )}
+
+                {isDraftWizard && baseline === null && rateCard === null && (
+                    <div className="border-[1.5px] border-rust px-4 py-3">
+                        <span className="font-plex-mono text-[11px] font-semibold tracking-[0.08em] uppercase">
+                            No rate card published yet — a baseline pins the
+                            current rate card version at creation, so{' '}
+                            <TextLink href={rateCardShow()}>
+                                publish your rate card
+                            </TextLink>{' '}
+                            first.
                         </span>
                     </div>
                 )}
