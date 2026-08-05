@@ -2,11 +2,12 @@
 
 use App\Enums\EngagementStatus;
 
-test('the lifecycle is a strict forward chain', function () {
+test('the lifecycle is a forward chain with one review loop', function () {
     $expected = [
         'draft' => [EngagementStatus::PreparingBaseline],
         'preparing_baseline' => [EngagementStatus::AwaitingBaselineApproval],
-        'awaiting_baseline_approval' => [EngagementStatus::Active],
+        // A rejected or withdrawn baseline submission loops back to preparing.
+        'awaiting_baseline_approval' => [EngagementStatus::Active, EngagementStatus::PreparingBaseline],
         'active' => [EngagementStatus::AwaitingFinalAcceptance],
         'awaiting_final_acceptance' => [EngagementStatus::Completed],
         'completed' => [EngagementStatus::Archived],

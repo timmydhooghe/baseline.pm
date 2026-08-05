@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Engagements;
 
+use App\Enums\BaselineStatus;
 use App\Enums\EngagementStatus;
 use App\Models\Engagement;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -35,7 +36,9 @@ class TransitionEngagementRequest extends FormRequest
     }
 
     /**
-     * Refuse moves the EngagementStatus state machine does not allow.
+     * Refuse moves the EngagementStatus state machine does not allow, and
+     * keep the road into baseline approval owned by the baseline builder:
+     * only submitting a baseline puts an engagement under review.
      *
      * @return array<int, callable(Validator): void>
      */
@@ -55,6 +58,13 @@ class TransitionEngagementRequest extends FormRequest
                         'from' => $engagement->status->label(),
                         'to' => $target->label(),
                     ]));
+
+                    return;
+                }
+
+                if ($target === EngagementStatus::AwaitingBaselineApproval
+                    && $engagement->baselines()->where('status', BaselineStatus::AwaitingApproval)->doesntExist()) {
+                    $validator->errors()->add('status', __('Submit the baseline from the baseline builder to put it up for approval.'));
                 }
             },
         ];

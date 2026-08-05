@@ -1,8 +1,10 @@
 <?php
 
+use App\Enums\BaselineStatus;
 use App\Enums\EngagementStatus;
 use App\Enums\UserRole;
 use App\Models\AuditLog;
+use App\Models\Baseline;
 use App\Models\Customer;
 use App\Models\Engagement;
 use App\Models\User;
@@ -49,6 +51,16 @@ test('members cannot start engagements', function () {
 test('an engagement walks the full lifecycle to archived', function () {
     $manager = User::factory()->role(UserRole::DeliveryManager)->create();
     $engagement = Engagement::factory()->for($manager->organization)->create();
+
+    /*
+     * Awaiting-baseline-approval requires a submitted baseline, and moving
+     * on to Active approves it — see BaselineSubmitTest for those flows.
+     */
+    Baseline::factory()
+        ->for($manager->organization)
+        ->for($engagement)
+        ->status(BaselineStatus::AwaitingApproval)
+        ->create();
 
     $path = [
         EngagementStatus::PreparingBaseline,

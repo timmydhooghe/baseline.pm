@@ -101,6 +101,8 @@ class EngagementController extends Controller
     {
         Gate::authorize('view', $engagement);
 
+        $baseline = $engagement->openBaseline() ?? $engagement->approvedBaseline();
+
         return Inertia::render('engagements/show', [
             'engagement' => [
                 'id' => $engagement->id,
@@ -117,6 +119,12 @@ class EngagementController extends Controller
                         'value' => $status->value,
                         'label' => $status->label(),
                     ]),
+            ],
+            'baseline' => $baseline === null ? null : [
+                'id' => $baseline->id,
+                'version' => $baseline->version,
+                'status' => $baseline->status->value,
+                'statusLabel' => $baseline->status->label(),
             ],
             'lifecycle' => collect(EngagementStatus::cases())
                 ->map(fn (EngagementStatus $status): array => [

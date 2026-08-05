@@ -1,6 +1,10 @@
 <?php
 
 use App\Http\Controllers\AcceptInvitationController;
+use App\Http\Controllers\BaselineCommercialController;
+use App\Http\Controllers\BaselineController;
+use App\Http\Controllers\BaselineDocumentController;
+use App\Http\Controllers\BaselineItemController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\EngagementController;
 use App\Http\Controllers\InvitationController;
@@ -19,6 +23,19 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::post('engagements', [EngagementController::class, 'store'])->name('engagements.store');
     Route::get('engagements/{engagement}', [EngagementController::class, 'show'])->name('engagements.show');
     Route::post('engagements/{engagement}/transition', [EngagementController::class, 'transition'])->name('engagements.transition');
+
+    Route::get('engagements/{engagement}/baseline', [BaselineController::class, 'show'])->name('engagements.baseline.show');
+    Route::post('engagements/{engagement}/baseline', [BaselineController::class, 'store'])->name('engagements.baseline.store');
+    Route::patch('baselines/{baseline}', [BaselineController::class, 'update'])->name('baselines.update');
+    Route::post('baselines/{baseline}/checks/acknowledge', [BaselineController::class, 'acknowledge'])->name('baselines.checks.acknowledge');
+    Route::post('baselines/{baseline}/submit', [BaselineController::class, 'submit'])->name('baselines.submit');
+    Route::post('baselines/{baseline}/items', [BaselineItemController::class, 'store'])->name('baselines.items.store');
+    Route::patch('baselines/{baseline}/items/{item}', [BaselineItemController::class, 'update'])->scopeBindings()->name('baselines.items.update');
+    Route::delete('baselines/{baseline}/items/{item}', [BaselineItemController::class, 'destroy'])->scopeBindings()->name('baselines.items.destroy');
+    Route::post('baselines/{baseline}/documents', [BaselineDocumentController::class, 'store'])->name('baselines.documents.store');
+    Route::get('baselines/{baseline}/documents/{document}', [BaselineDocumentController::class, 'show'])->scopeBindings()->name('baselines.documents.show');
+    Route::delete('baselines/{baseline}/documents/{document}', [BaselineDocumentController::class, 'destroy'])->scopeBindings()->name('baselines.documents.destroy');
+    Route::put('baselines/{baseline}/commercials', [BaselineCommercialController::class, 'update'])->name('baselines.commercials.update');
 
     Route::get('customers', [CustomerController::class, 'index'])->name('customers.index');
     Route::post('customers', [CustomerController::class, 'store'])->name('customers.store');

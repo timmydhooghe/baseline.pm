@@ -26,6 +26,9 @@ enum EngagementStatus: string
     }
 
     /**
+     * A rejected, clarification-requested or withdrawn baseline submission
+     * moves the engagement back from awaiting approval to preparing.
+     *
      * @return list<self>
      */
     public function allowedTransitions(): array
@@ -33,7 +36,7 @@ enum EngagementStatus: string
         return match ($this) {
             self::Draft => [self::PreparingBaseline],
             self::PreparingBaseline => [self::AwaitingBaselineApproval],
-            self::AwaitingBaselineApproval => [self::Active],
+            self::AwaitingBaselineApproval => [self::Active, self::PreparingBaseline],
             self::Active => [self::AwaitingFinalAcceptance],
             self::AwaitingFinalAcceptance => [self::Completed],
             self::Completed => [self::Archived],

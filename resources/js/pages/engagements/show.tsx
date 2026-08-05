@@ -18,7 +18,8 @@ import {
     index as engagements,
     show as engagementShow,
 } from '@/routes/engagements';
-import type { EngagementStatus, SelectOption } from '@/types';
+import { show as baselineShow } from '@/routes/engagements/baseline';
+import type { BaselineStatus, EngagementStatus, SelectOption } from '@/types';
 
 type EngagementDetail = {
     id: string;
@@ -30,13 +31,26 @@ type EngagementDetail = {
     allowedTransitions: SelectOption[];
 };
 
+type BaselineSummary = {
+    id: string;
+    version: number;
+    status: BaselineStatus;
+    statusLabel: string;
+};
+
 type Props = {
     engagement: EngagementDetail;
+    baseline: BaselineSummary | null;
     lifecycle: SelectOption[];
     can: { transition: boolean; viewCustomer: boolean };
 };
 
-export default function EngagementsShow({ engagement, lifecycle, can }: Props) {
+export default function EngagementsShow({
+    engagement,
+    baseline,
+    lifecycle,
+    can,
+}: Props) {
     setLayoutProps({
         breadcrumbs: [
             { title: 'Engagements', href: engagements() },
@@ -152,57 +166,104 @@ export default function EngagementsShow({ engagement, lifecycle, can }: Props) {
                     </ol>
                 </div>
 
+                <div className="border-[1.5px] border-ink dark:border-paper">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b-[1.5px] border-ink px-4 py-3 dark:border-paper">
+                        <span className="font-plex-mono text-[11px] font-semibold tracking-[0.08em] text-stone uppercase dark:text-fog">
+                            Baseline
+                        </span>
+                        {baseline !== null && (
+                            <span className="font-plex-mono text-[11px] font-semibold uppercase">
+                                v{baseline.version} · {baseline.statusLabel}
+                            </span>
+                        )}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                        <p className="max-w-xl text-[13px] text-stone dark:text-fog">
+                            {baseline === null &&
+                                'Turn the signed contract into the commitment ledger: structured scope, derived cost budget, immutable approval snapshot.'}
+                            {baseline?.status === 'draft' &&
+                                'A draft is being prepared in the six-step builder.'}
+                            {baseline?.status === 'awaiting_approval' &&
+                                'Submitted — the frozen snapshot awaits the customer approver.'}
+                            {baseline?.status === 'approved' &&
+                                'Approved and immutable. Changes go through change requests, each creating the next version.'}
+                        </p>
+                        <Button
+                            asChild
+                            variant="outline"
+                            className="rounded-none border-[1.5px] border-ink font-semibold shadow-none dark:border-paper"
+                            data-test="open-baseline-builder-button"
+                        >
+                            <Link href={baselineShow(engagement.id)} prefetch>
+                                {baseline === null && can.transition
+                                    ? 'Build baseline →'
+                                    : baseline?.status === 'draft' &&
+                                        can.transition
+                                      ? 'Continue in builder →'
+                                      : 'View baseline →'}
+                            </Link>
+                        </Button>
+                    </div>
+                </div>
+
                 {can.transition && engagement.allowedTransitions.length > 0 && (
                     <div className="flex flex-wrap items-center gap-3">
-                        {engagement.allowedTransitions.map((target) =>
-                            target.value === 'archived' ? (
-                                <Dialog key={target.value}>
-                                    <DialogTrigger asChild>
-                                        <Button
-                                            variant="outline"
-                                            className="rounded-none border-[1.5px] border-ink font-semibold shadow-none dark:border-paper"
-                                            data-test="archive-engagement-button"
-                                        >
-                                            Archive engagement
-                                        </Button>
-                                    </DialogTrigger>
-                                    <DialogContent>
-                                        <DialogTitle>
-                                            Archive {engagement.name}?
-                                        </DialogTitle>
-                                        <DialogDescription>
-                                            Archived engagements become
-                                            read-only forever. They stay
-                                            searchable and free up a plan slot.
-                                        </DialogDescription>
-                                        <DialogFooter className="gap-2">
-                                            <DialogClose asChild>
-                                                <Button variant="secondary">
-                                                    Cancel
-                                                </Button>
-                                            </DialogClose>
+                        {engagement.allowedTransitions
+                            .filter(
+                                (target) =>
+                                    target.value !==
+                                    'awaiting_baseline_approval',
+                            )
+                            .map((target) =>
+                                target.value === 'archived' ? (
+                                    <Dialog key={target.value}>
+                                        <DialogTrigger asChild>
                                             <Button
-                                                data-test="confirm-archive-engagement-button"
-                                                onClick={() =>
-                                                    transition(target.value)
-                                                }
+                                                variant="outline"
+                                                className="rounded-none border-[1.5px] border-ink font-semibold shadow-none dark:border-paper"
+                                                data-test="archive-engagement-button"
                                             >
-                                                Archive
+                                                Archive engagement
                                             </Button>
-                                        </DialogFooter>
-                                    </DialogContent>
-                                </Dialog>
-                            ) : (
-                                <Button
-                                    key={target.value}
-                                    className="rounded-none bg-ink font-semibold text-paper shadow-none hover:bg-rust dark:bg-paper dark:text-ink dark:hover:bg-rust dark:hover:text-paper"
-                                    data-test={`transition-${target.value}-button`}
-                                    onClick={() => transition(target.value)}
-                                >
-                                    Move to {target.label} →
-                                </Button>
-                            ),
-                        )}
+                                        </DialogTrigger>
+                                        <DialogContent>
+                                            <DialogTitle>
+                                                Archive {engagement.name}?
+                                            </DialogTitle>
+                                            <DialogDescription>
+                                                Archived engagements become
+                                                read-only forever. They stay
+                                                searchable and free up a plan
+                                                slot.
+                                            </DialogDescription>
+                                            <DialogFooter className="gap-2">
+                                                <DialogClose asChild>
+                                                    <Button variant="secondary">
+                                                        Cancel
+                                                    </Button>
+                                                </DialogClose>
+                                                <Button
+                                                    data-test="confirm-archive-engagement-button"
+                                                    onClick={() =>
+                                                        transition(target.value)
+                                                    }
+                                                >
+                                                    Archive
+                                                </Button>
+                                            </DialogFooter>
+                                        </DialogContent>
+                                    </Dialog>
+                                ) : (
+                                    <Button
+                                        key={target.value}
+                                        className="rounded-none bg-ink font-semibold text-paper shadow-none hover:bg-rust dark:bg-paper dark:text-ink dark:hover:bg-rust dark:hover:text-paper"
+                                        data-test={`transition-${target.value}-button`}
+                                        onClick={() => transition(target.value)}
+                                    >
+                                        Move to {target.label} →
+                                    </Button>
+                                ),
+                            )}
                         <InputError message={errors.status} />
                     </div>
                 )}
