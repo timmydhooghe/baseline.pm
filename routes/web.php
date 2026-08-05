@@ -14,9 +14,11 @@ use App\Http\Controllers\MemberController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\RateCardController;
 use App\Http\Controllers\StakeholderController;
+use App\Http\Controllers\TriageController;
 use App\Http\Controllers\WorkController;
 use App\Http\Controllers\WorkItemController;
 use App\Http\Controllers\WorkItemLinkController;
+use App\Http\Controllers\WorkItemTriageController;
 use App\Http\Controllers\WorkItemWorklogController;
 use Illuminate\Support\Facades\Route;
 
@@ -52,6 +54,8 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::post('work-items/{workItem}/worklogs', [WorkItemWorklogController::class, 'store'])->name('work-items.worklogs.store');
     Route::post('engagements/{engagement}/work-item-links', [WorkItemLinkController::class, 'store'])->name('engagements.work-item-links.store');
     Route::delete('work-items/{workItem}/link', [WorkItemLinkController::class, 'destroy'])->name('work-items.link.destroy');
+    Route::get('engagements/{engagement}/triage', [TriageController::class, 'show'])->name('engagements.triage.show');
+    Route::post('work-items/{workItem}/triage', [WorkItemTriageController::class, 'store'])->name('work-items.triage.store');
 
     Route::get('customers', [CustomerController::class, 'index'])->name('customers.index');
     Route::post('customers', [CustomerController::class, 'store'])->name('customers.store');

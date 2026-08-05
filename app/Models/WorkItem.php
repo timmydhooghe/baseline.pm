@@ -7,8 +7,10 @@ use App\Enums\EstimateUnit;
 use App\Enums\IntegrationConnectionStatus;
 use App\Enums\WorkItemSource;
 use App\Enums\WorkItemState;
+use App\Enums\WorkItemTriageStatus;
 use App\Jobs\PushWorkItemLink;
 use App\Models\Concerns\BelongsToOrganization;
+use App\ValueObjects\Money;
 use Carbon\CarbonImmutable;
 use Database\Factories\WorkItemFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -28,7 +30,9 @@ use Illuminate\Validation\ValidationException;
  * from Jira or Linear, or a manual item recorded in standalone mode. Synced
  * items mirror the provider and are refreshed by sync runs; manual items are
  * edited by hand. Whether the item is mapped to a deliverable is the drift
- * signal (FA-9): unmapped work is potential scope creep. Sync mirroring
+ * signal (FA-9): unmapped work is potential scope creep, surfaced in the
+ * triage inbox until it is classified — existing scope, potential change,
+ * operational or dismissed — with classifier and timestamp. Sync mirroring
  * writes no audit entries — the governance moments (mapping, manual
  * recording) are audited explicitly.
  *
@@ -47,6 +51,10 @@ use Illuminate\Validation\ValidationException;
  * @property string|null $assignee_name
  * @property float|null $estimate_value
  * @property EstimateUnit|null $estimate_unit
+ * @property WorkItemTriageStatus|null $triage_status
+ * @property string|null $triage_note
+ * @property string|null $triaged_by
+ * @property CarbonImmutable|null $triaged_at
  * @property CarbonImmutable|null $external_updated_at
  * @property CarbonImmutable|null $last_synced_at
  * @property string|null $created_by
@@ -56,8 +64,10 @@ use Illuminate\Validation\ValidationException;
  * @property-read Engagement $engagement
  * @property-read IntegrationConnection|null $integration
  * @property-read User|null $createdBy
+ * @property-read User|null $triagedBy
  * @property-read Collection<int, WorkItemWorklog> $worklogs
  * @property-read WorkItemLink|null $link
+ * @property-read ChangeRequest|null $changeRequest
  */
 #[Fillable(['source', 'external_id', 'external_key', 'external_url', 'title', 'external_status', 'state', 'type', 'assignee_name', 'estimate_value', 'estimate_unit', 'external_updated_at', 'last_synced_at', 'created_by'])]
 class WorkItem extends Model
@@ -120,7 +130,9 @@ class WorkItem extends Model
 
     /**
      * Remove the mapping; the item becomes unmapped work again and the
-     * removal stays on the audit record.
+     * removal stays on the audit record. An existing-scope classification is
+     * tied to the mapping it required, so unlinking clears it and the item
+     * returns to the triage inbox — the audit trail keeps the history.
      */
     public function unlink(?User $actor = null): void
     {
@@ -130,16 +142,198 @@ class WorkItem extends Model
             return;
         }
 
-        $deliverable = $link->baselineItem;
-        $link->delete();
-        $this->setRelation('link', null);
+        DB::transaction(function () use ($link, $actor): void {
+            $deliverable = $link->baselineItem;
+            $link->delete();
+            $this->setRelation('link', null);
 
-        AuditLog::record('work_item.unlinked', $this, [
-            'baseline_item_id' => $deliverable->id,
-            'deliverable' => $deliverable->title,
-            'work_item' => $this->external_key ?? $this->title,
-            'unlinked_by' => $actor?->name,
+            if ($this->triage_status === WorkItemTriageStatus::ExistingScope) {
+                $this->triage_status = null;
+                $this->triage_note = null;
+                $this->triaged_by = null;
+                $this->triaged_at = null;
+                $this->save();
+            }
+
+            AuditLog::record('work_item.unlinked', $this, [
+                'baseline_item_id' => $deliverable->id,
+                'deliverable' => $deliverable->title,
+                'work_item' => $this->external_key ?? $this->title,
+                'unlinked_by' => $actor?->name,
+            ]);
+        });
+    }
+
+    /**
+     * Classify this drift item out of the triage inbox (FA-9). Every
+     * decision is recorded with classifier and timestamp and lands in the
+     * audit log — dismissals included, so the call stays on record. Existing
+     * scope must name the deliverable that absorbs the work; excluding work
+     * as operational must log the explanation; a potential change drafts a
+     * change request pre-filled from the item.
+     */
+    public function triage(
+        WorkItemTriageStatus $status,
+        User $actor,
+        ?BaselineItem $deliverable = null,
+        ?string $note = null,
+    ): void {
+        if ($this->link !== null) {
+            throw ValidationException::withMessages([
+                'classification' => __('This item is already mapped to a deliverable — it is not drift.'),
+            ]);
+        }
+
+        if ($status === WorkItemTriageStatus::ExistingScope && $deliverable === null) {
+            throw ValidationException::withMessages([
+                'baseline_item_id' => __('Existing scope requires the deliverable that absorbs the work.'),
+            ]);
+        }
+
+        if ($status === WorkItemTriageStatus::Operational && ($note === null || trim($note) === '')) {
+            throw ValidationException::withMessages([
+                'note' => __('Excluding work as operational requires an explanation — it stays on the record.'),
+            ]);
+        }
+
+        DB::transaction(function () use ($status, $actor, $deliverable, $note): void {
+            $changeRequest = null;
+
+            if ($status === WorkItemTriageStatus::ExistingScope) {
+                $this->linkTo($deliverable, $actor);
+            }
+
+            if ($status === WorkItemTriageStatus::PotentialChange) {
+                $changeRequest = $this->changeRequest ?? $this->draftChangeRequest($actor);
+            }
+
+            $this->triage_status = $status;
+            $this->triage_note = $note;
+            $this->triaged_by = $actor->id;
+            $this->triaged_at = now();
+            $this->save();
+
+            AuditLog::record('work_item.triaged', $this, [
+                'classification' => $status->value,
+                'work_item' => $this->external_key ?? $this->title,
+                'triaged_by' => $actor->name,
+                'note' => $note,
+                'deliverable' => $deliverable?->title,
+                'change_request_id' => $changeRequest?->id,
+            ]);
+        });
+    }
+
+    /**
+     * The earliest evidence that execution began: the first worklog date,
+     * or — when the state already moved past todo without any logged time —
+     * the moment the item was first seen. Null means no work has demonstrably
+     * started. This feeds FA-9's breach detection: work that starts before a
+     * change request is approved is a contractual breach risk.
+     */
+    public function workStartedAt(): ?CarbonImmutable
+    {
+        $firstWorklog = $this->worklogs->sortBy('logged_on')->first();
+
+        if ($firstWorklog !== null) {
+            return $firstWorklog->logged_on->toImmutable();
+        }
+
+        if (in_array($this->state, [WorkItemState::InProgress, WorkItemState::Done], true)) {
+            return $this->created_at?->toImmutable();
+        }
+
+        return null;
+    }
+
+    /**
+     * The effort basis for pricing drift (FA-9): the greater of the estimate
+     * converted to working days and the time actually logged — logged time
+     * can outgrow the estimate, and unbilled risk should not shrink because
+     * it did. Null when neither yields days (e.g. a points estimate with no
+     * worklogs): unpriced beats invented.
+     */
+    public function effortDays(): ?float
+    {
+        $estimated = $this->estimate_value !== null
+            ? $this->estimate_unit?->toDays($this->estimate_value)
+            : null;
+        $logged = $this->loggedSeconds() > 0
+            ? $this->loggedSeconds() / 3600 / EstimateUnit::HOURS_PER_DAY
+            : null;
+
+        if ($estimated === null && $logged === null) {
+            return null;
+        }
+
+        return max($estimated ?? 0.0, $logged ?? 0.0);
+    }
+
+    /**
+     * Price this item's effort at a blended day rate (FA-9): internal cost
+     * at cost/day, potential price at sell/day, whole cents. Null money when
+     * the item has no priceable effort or there are no rates to derive from.
+     *
+     * @param  array{cost: Money, sell: Money}|null  $rates
+     * @return array{days: float|null, cost: Money|null, price: Money|null}
+     */
+    public function priceEffort(?array $rates): array
+    {
+        $days = $this->effortDays();
+
+        if ($days === null || $rates === null) {
+            return ['days' => $days, 'cost' => null, 'price' => null];
+        }
+
+        return [
+            'days' => $days,
+            'cost' => Money::fromCents((int) round($days * $rates['cost']->amount)),
+            'price' => Money::fromCents((int) round($days * $rates['sell']->amount)),
+        ];
+    }
+
+    /**
+     * Pre-fill a draft change request from this drift item (FA-9 → FA-12):
+     * effort seeded from the greater of the provider estimate and logged
+     * time, and the earliest evidence of started work snapshotted so the
+     * contractual breach risk survives later syncs. One draft per item —
+     * re-triaging reuses it.
+     */
+    protected function draftChangeRequest(User $actor): ChangeRequest
+    {
+        $origin = implode(' · ', array_filter([
+            $this->external_key,
+            $this->source->label(),
+            $this->assignee_name,
+        ]));
+
+        $changeRequest = new ChangeRequest([
+            'title' => __('Drift: :title', ['title' => $this->title]),
+            'what' => __(':title (:origin) surfaced as unmapped drift work. Assess scope, affected deliverables and commercial terms.', [
+                'title' => $this->title,
+                'origin' => $origin,
+            ]),
+            'origin' => 'drift',
+            'estimated_days' => $this->effortDays(),
+            'logged_seconds' => $this->loggedSeconds(),
+            'work_started_at' => $this->workStartedAt(),
+            'created_by' => $actor->id,
         ]);
+        $changeRequest->organization_id = $this->organization_id;
+        $changeRequest->engagement_id = $this->engagement_id;
+        $changeRequest->work_item_id = $this->id;
+        $changeRequest->save();
+
+        $this->setRelation('changeRequest', $changeRequest);
+
+        AuditLog::record('change_request.drafted', $changeRequest, [
+            'work_item' => $this->external_key ?? $this->title,
+            'title' => $changeRequest->title,
+            'estimated_days' => $changeRequest->estimated_days,
+            'work_started_at' => $changeRequest->work_started_at?->toIso8601String(),
+        ]);
+
+        return $changeRequest;
     }
 
     /**
@@ -224,6 +418,25 @@ class WorkItem extends Model
     }
 
     /**
+     * @return BelongsTo<User, $this>
+     */
+    public function triagedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'triaged_by');
+    }
+
+    /**
+     * The change request drafted from this item, when it was triaged as a
+     * potential change.
+     *
+     * @return HasOne<ChangeRequest, $this>
+     */
+    public function changeRequest(): HasOne
+    {
+        return $this->hasOne(ChangeRequest::class);
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -235,6 +448,8 @@ class WorkItem extends Model
             'state' => WorkItemState::class,
             'estimate_value' => 'float',
             'estimate_unit' => EstimateUnit::class,
+            'triage_status' => WorkItemTriageStatus::class,
+            'triaged_at' => 'datetime',
             'external_updated_at' => 'datetime',
             'last_synced_at' => 'datetime',
         ];

@@ -14,6 +14,27 @@ enum EstimateUnit: string
     case Points = 'points';
     case Days = 'days';
 
+    /**
+     * The working-day divisor used when converting logged or estimated time
+     * to days for rate-card costing.
+     */
+    public const float HOURS_PER_DAY = 8.0;
+
+    /**
+     * Convert an estimate to working days for rate-card costing (FA-9), or
+     * null when the unit has no time equivalence: points are relative
+     * sizing, and inventing a conversion would be a free-typed number in
+     * disguise.
+     */
+    public function toDays(float $value): ?float
+    {
+        return match ($this) {
+            self::Seconds => $value / 3600 / self::HOURS_PER_DAY,
+            self::Points => null,
+            self::Days => $value,
+        };
+    }
+
     public function label(): string
     {
         return match ($this) {

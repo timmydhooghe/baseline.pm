@@ -1,6 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
 import type { ReactNode } from 'react';
 import { Breadcrumbs } from '@/components/breadcrumbs';
+import EngagementPositionRail from '@/components/engagement-position-rail';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -12,7 +13,12 @@ import { dashboard } from '@/routes';
 import { index as customers } from '@/routes/customers';
 import { index as engagements } from '@/routes/engagements';
 import { show as organization } from '@/routes/organization';
-import type { Auth, BreadcrumbItem, UserRole } from '@/types';
+import type {
+    Auth,
+    BreadcrumbItem,
+    EngagementPositionSummary,
+    UserRole,
+} from '@/types';
 
 const managingRoles: UserRole[] = [
     'owner',
@@ -71,10 +77,18 @@ function PositionRail() {
 export default function PositionLayout({
     breadcrumbs = [],
     rail,
+    position,
     children,
 }: {
     breadcrumbs?: BreadcrumbItem[];
     rail?: ReactNode;
+    /**
+     * Plain-data engagement position for the rail. Passed via
+     * setLayoutProps by engagement pages — serializable on purpose: JSX in
+     * layout props re-renders forever (the layout-props store deep-compares
+     * with isEqual, which never matches fresh React elements).
+     */
+    position?: EngagementPositionSummary;
     children: ReactNode;
 }) {
     const { auth } = usePage<{ auth: Auth }>().props;
@@ -130,7 +144,12 @@ export default function PositionLayout({
 
             <div className="flex flex-1">
                 <aside className="hidden w-64 shrink-0 border-r-[1.5px] border-ink p-4 lg:block dark:border-paper">
-                    {rail ?? <PositionRail />}
+                    {rail ??
+                        (position !== undefined ? (
+                            <EngagementPositionRail position={position} />
+                        ) : (
+                            <PositionRail />
+                        ))}
                 </aside>
 
                 <main className="min-w-0 flex-1">

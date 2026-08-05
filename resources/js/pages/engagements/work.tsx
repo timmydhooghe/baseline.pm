@@ -1,4 +1,4 @@
-import { Head, setLayoutProps } from '@inertiajs/react';
+import { Head, Link, setLayoutProps } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import WorkConnectDialog from '@/components/work-connect-dialog';
 import WorkConnectionCard from '@/components/work-connection-card';
@@ -8,8 +8,10 @@ import {
     index as engagements,
     show as engagementShow,
 } from '@/routes/engagements';
+import { show as triageShow } from '@/routes/engagements/triage';
 import { show as workShow } from '@/routes/engagements/work';
 import type {
+    EngagementPositionSummary,
     EngagementStatus,
     IntegrationAccountOption,
     IntegrationConnectionView,
@@ -32,6 +34,7 @@ type Props = {
     workItems: WorkItemView[];
     releases: ReleaseView[];
     mapping: WorkMappingSummary;
+    position: EngagementPositionSummary;
     deliverables: { id: string; title: string }[];
     baselineVersion: number | null;
     accounts: IntegrationAccountOption[];
@@ -53,6 +56,7 @@ export default function EngagementsWork({
     workItems,
     releases,
     mapping,
+    position,
     deliverables,
     baselineVersion,
     accounts,
@@ -65,6 +69,7 @@ export default function EngagementsWork({
             { title: engagement.name, href: engagementShow(engagement.id) },
             { title: 'Work', href: workShow(engagement.id) },
         ],
+        position,
     });
 
     const stats = [
@@ -120,13 +125,21 @@ export default function EngagementsWork({
                 </div>
 
                 {mapping.unlinked > 0 && (
-                    <div className="border-[1.5px] border-rust px-4 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-[1.5px] border-rust px-4 py-3">
                         <span className="font-plex-mono text-[11px] font-semibold tracking-[0.08em] text-rust uppercase">
                             {mapping.unlinked} unmapped{' '}
                             {mapping.unlinked === 1 ? 'item' : 'items'} —
                             unmapped work is potential scope creep. Map it to a
                             deliverable or triage it.
                         </span>
+                        <Link
+                            href={triageShow(engagement.id)}
+                            prefetch
+                            className="font-plex-mono text-[11px] font-semibold tracking-[0.08em] text-rust uppercase underline underline-offset-4 hover:text-ink dark:hover:text-paper"
+                            data-test="open-triage-inbox"
+                        >
+                            Open triage inbox →
+                        </Link>
                     </div>
                 )}
 

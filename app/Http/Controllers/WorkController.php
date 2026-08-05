@@ -79,6 +79,7 @@ class WorkController extends Controller
                 'linked' => $workItems->filter(fn (WorkItem $item): bool => $item->link !== null)->count(),
                 'unlinked' => $workItems->filter(fn (WorkItem $item): bool => $item->link === null)->count(),
             ],
+            'position' => $engagement->positionSummary(),
             'deliverables' => $deliverables
                 ->map(fn (BaselineItem $item): array => [
                     'id' => $item->id,

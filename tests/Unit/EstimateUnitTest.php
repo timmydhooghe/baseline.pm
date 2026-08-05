@@ -12,3 +12,10 @@ test('points and days format compactly', function () {
         ->and(EstimateUnit::Days->format(2.5))->toBe('2.5d')
         ->and(EstimateUnit::Days->format(2.0))->toBe('2d');
 });
+
+test('estimates convert to working days for costing, except points which have no time equivalence', function () {
+    expect(EstimateUnit::Seconds->toDays(8 * 3600.0))->toBe(1.0)
+        ->and(EstimateUnit::Seconds->toDays(4 * 3600.0))->toBe(0.5)
+        ->and(EstimateUnit::Days->toDays(2.5))->toBe(2.5)
+        ->and(EstimateUnit::Points->toDays(3.0))->toBeNull();
+});

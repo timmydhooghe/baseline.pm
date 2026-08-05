@@ -1,3 +1,5 @@
+import type { Money } from './domain';
+
 export type IntegrationProvider = 'jira' | 'linear';
 
 export type IntegrationConnectionStatus = 'connected' | 'disconnected';
@@ -76,6 +78,65 @@ export type WorkMappingSummary = {
     total: number;
     linked: number;
     unlinked: number;
+};
+
+export type WorkItemTriageStatus =
+    'existing_scope' | 'potential_change' | 'operational' | 'dismissed';
+
+export type TriageInboxItemView = {
+    id: string;
+    title: string;
+    externalKey: string | null;
+    externalUrl: string | null;
+    sourceLabel: string;
+    type: string | null;
+    assigneeName: string | null;
+    state: WorkItemState;
+    stateLabel: string;
+    externalStatus: string | null;
+    ageDays: number;
+    firstSeen: string | null;
+    estimate: string | null;
+    logged: string | null;
+    effortDays: number | null;
+    cost: Money | null;
+    price: Money | null;
+    workStartedAt: string | null;
+    breachRisk: boolean;
+    suggestedDeliverable: { id: string; title: string } | null;
+    timelineImpact: {
+        milestone: string;
+        daysUntil: number | null;
+        effortDays: number;
+    } | null;
+};
+
+export type TriagedItemView = {
+    id: string;
+    title: string;
+    externalKey: string | null;
+    sourceLabel: string;
+    classification: WorkItemTriageStatus;
+    classificationLabel: string;
+    triagedByName: string | null;
+    triagedAt: string | null;
+    note: string | null;
+    deliverableTitle: string | null;
+    changeRequest: {
+        id: string;
+        title: string;
+        statusLabel: string;
+        breachRisk: boolean;
+    } | null;
+};
+
+export type TriagePricingView = {
+    available: boolean;
+    baselineVersion: number | null;
+    rateCardVersion: number | null;
+    costPerDay: Money | null;
+    sellPerDay: Money | null;
+    hoursPerDay: number;
 };
 
 export type EngagementWorkSummary = {

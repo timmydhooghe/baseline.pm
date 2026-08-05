@@ -457,6 +457,48 @@ class Baseline extends Model
     }
 
     /**
+     * The blended cost and sell day rates that drift pricing derives from
+     * (FA-9): the baseline's role mix weighted by allocated days — the
+     * planned team's actual composition — falling back to a straight average
+     * over the pinned rate card version while no role mix exists. Null when
+     * there are no pinned rates to derive from: unpriced beats free-typed.
+     *
+     * @return array{cost: Money, sell: Money}|null
+     */
+    public function blendedDayRates(): ?array
+    {
+        $allocations = $this->allocations->filter(
+            fn (BaselineAllocation $allocation): bool => (float) $allocation->days > 0,
+        );
+
+        if ($allocations->isNotEmpty()) {
+            $totalDays = $allocations->sum(fn (BaselineAllocation $allocation): float => (float) $allocation->days);
+            $cost = $allocations->sum(
+                fn (BaselineAllocation $allocation): float => (float) $allocation->days * $allocation->role->cost_per_day->amount,
+            );
+            $sell = $allocations->sum(
+                fn (BaselineAllocation $allocation): float => (float) $allocation->days * $allocation->role->sell_per_day->amount,
+            );
+
+            return [
+                'cost' => Money::fromCents((int) round($cost / $totalDays)),
+                'sell' => Money::fromCents((int) round($sell / $totalDays)),
+            ];
+        }
+
+        $roles = $this->rateCardVersion?->roles;
+
+        if ($roles === null || $roles->isEmpty()) {
+            return null;
+        }
+
+        return [
+            'cost' => Money::fromCents((int) round($roles->sum(fn (RateCardRole $role): int => $role->cost_per_day->amount) / $roles->count())),
+            'sell' => Money::fromCents((int) round($roles->sum(fn (RateCardRole $role): int => $role->sell_per_day->amount) / $roles->count())),
+        ];
+    }
+
+    /**
      * The frozen payload for a review snapshot. The customer variant is
      * built structurally without cost, rate or margin data — those keys are
      * never present, not merely blanked (FA-5 step 6, FA-27).

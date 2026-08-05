@@ -62,4 +62,23 @@ class WorkItemPolicy
             && $user->organization_id === $workItem->organization_id
             && $workItem->engagement->status !== EngagementStatus::Archived;
     }
+
+    /**
+     * Triage decisions are governance calls on the engagement's scope —
+     * absorbing cost into margin, drafting change requests, excluding work
+     * from analysis (FA-9). Manager territory, unlike day-to-day mapping.
+     */
+    public function triageAny(User $user, Engagement $engagement): bool
+    {
+        return $user->role->isManager()
+            && $user->organization_id === $engagement->organization_id
+            && $engagement->status !== EngagementStatus::Archived;
+    }
+
+    public function triage(User $user, WorkItem $workItem): bool
+    {
+        return $user->role->isManager()
+            && $user->organization_id === $workItem->organization_id
+            && $workItem->engagement->status !== EngagementStatus::Archived;
+    }
 }

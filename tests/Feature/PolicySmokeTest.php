@@ -108,6 +108,15 @@ test('every executing role maps work, portfolio viewers only look at it', functi
     'portfolio viewer' => [UserRole::PortfolioViewer, false],
 ]);
 
+test('drift triage is a governance call for managing roles only', function (UserRole $role, bool $allowed) {
+    $user = User::factory()->role($role)->create();
+    $engagement = Engagement::factory()->for($user->organization)->create();
+    $workItem = WorkItem::factory()->for($user->organization)->for($engagement)->create();
+
+    expect(Gate::forUser($user)->allows('triageAny', [WorkItem::class, $engagement]))->toBe($allowed)
+        ->and(Gate::forUser($user)->allows('triage', $workItem))->toBe($allowed);
+})->with($everyRole);
+
 test('integrations are wired by managing roles and never deleted', function (UserRole $role, bool $allowed) {
     $user = User::factory()->role($role)->create();
     $engagement = Engagement::factory()->for($user->organization)->create();

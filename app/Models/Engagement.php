@@ -9,6 +9,7 @@ use App\Enums\WorkItemSource;
 use App\Jobs\SyncIntegrationConnection;
 use App\Models\Concerns\BelongsToOrganization;
 use App\Models\Concerns\RecordsAuditLog;
+use App\ValueObjects\Money;
 use Database\Factories\EngagementFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Collection;
@@ -39,6 +40,7 @@ use LogicException;
  * @property-read Collection<int, Baseline> $baselines
  * @property-read Collection<int, IntegrationConnection> $integrationConnections
  * @property-read Collection<int, WorkItem> $workItems
+ * @property-read Collection<int, ChangeRequest> $changeRequests
  * @property-read Collection<int, Release> $releases
  */
 #[Fillable(['name'])]
@@ -301,6 +303,85 @@ class Engagement extends Model
     public function workItems(): HasMany
     {
         return $this->hasMany(WorkItem::class);
+    }
+
+    /**
+     * @return HasMany<ChangeRequest, $this>
+     */
+    public function changeRequests(): HasMany
+    {
+        return $this->hasMany(ChangeRequest::class);
+    }
+
+    /**
+     * Unmapped work still waiting for a triage decision (FA-9) — the inbox
+     * queue whose potential price is the engagement's unbilled risk (FA-10).
+     *
+     * @return HasMany<WorkItem, $this>
+     */
+    public function driftWorkItems(): HasMany
+    {
+        return $this->workItems()
+            ->whereDoesntHave('link')
+            ->whereNull('triage_status');
+    }
+
+    /**
+     * The aggregate commercial exposure of unresolved drift (FA-10): every
+     * untriaged unmapped item priced at the current baseline's blended day
+     * rates. Items without priceable effort are counted as unpriced —
+     * visible risk that carries no number yet, never a made-up one.
+     *
+     * @return array{count: int, unpriced: int, cost: Money, price: Money}
+     */
+    public function unbilledRisk(): array
+    {
+        $rates = $this->currentBaseline()?->blendedDayRates();
+        $items = $this->driftWorkItems()->with('worklogs')->get();
+
+        $cost = Money::zero();
+        $price = Money::zero();
+        $unpriced = 0;
+
+        foreach ($items as $item) {
+            $priced = $item->priceEffort($rates);
+
+            if ($priced['cost'] === null || $priced['price'] === null) {
+                $unpriced++;
+
+                continue;
+            }
+
+            $cost = $cost->add($priced['cost']);
+            $price = $price->add($priced['price']);
+        }
+
+        return ['count' => $items->count(), 'unpriced' => $unpriced, 'cost' => $cost, 'price' => $price];
+    }
+
+    /**
+     * The position rail summary (FA-10): what is contracted and what the
+     * unresolved drift would be worth, always visible beside the engagement's
+     * pages. The waterfall's remaining lines — burned, pending CRs, accepted
+     * value — arrive with their own features (FA-14, FA-16, FA-23).
+     *
+     * @return array<string, mixed>
+     */
+    public function positionSummary(): array
+    {
+        $approved = $this->approvedBaseline();
+        $risk = $this->unbilledRisk();
+
+        return [
+            'engagementId' => $this->id,
+            'contracted' => $approved?->contract_value->toArray(),
+            'baselineVersion' => $approved?->version,
+            'unbilledRisk' => [
+                'count' => $risk['count'],
+                'unpriced' => $risk['unpriced'],
+                'price' => $risk['price']->toArray(),
+            ],
+        ];
     }
 
     /**

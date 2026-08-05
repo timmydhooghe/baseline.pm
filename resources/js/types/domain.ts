@@ -24,3 +24,14 @@ export type PlanUsage = {
     activeCount: number;
     limit: number | null;
 };
+
+export type EngagementPositionSummary = {
+    engagementId: string;
+    contracted: Money | null;
+    baselineVersion: number | null;
+    unbilledRisk: {
+        count: number;
+        unpriced: number;
+        price: Money;
+    };
+};

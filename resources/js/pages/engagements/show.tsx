@@ -22,6 +22,7 @@ import { show as baselineShow } from '@/routes/engagements/baseline';
 import { show as workShow } from '@/routes/engagements/work';
 import type {
     BaselineStatus,
+    EngagementPositionSummary,
     EngagementStatus,
     EngagementWorkSummary,
     SelectOption,
@@ -49,6 +50,7 @@ type Props = {
     baseline: BaselineSummary | null;
     work: EngagementWorkSummary;
     lifecycle: SelectOption[];
+    position: EngagementPositionSummary;
     can: { transition: boolean; viewCustomer: boolean };
 };
 
@@ -57,6 +59,7 @@ export default function EngagementsShow({
     baseline,
     work,
     lifecycle,
+    position,
     can,
 }: Props) {
     setLayoutProps({
@@ -64,6 +67,7 @@ export default function EngagementsShow({
             { title: 'Engagements', href: engagements() },
             { title: engagement.name, href: engagementShow(engagement.id) },
         ],
+        position,
     });
 
     const { errors } = usePage().props;

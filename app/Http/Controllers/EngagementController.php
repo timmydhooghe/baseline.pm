@@ -144,6 +144,7 @@ class EngagementController extends Controller
                     'value' => $status->value,
                     'label' => $status->label(),
                 ]),
+            'position' => $engagement->positionSummary(),
             'can' => [
                 'transition' => $request->user()?->can('transition', $engagement) ?? false,
                 'viewCustomer' => $request->user()?->can('view', $engagement->customer) ?? false,
