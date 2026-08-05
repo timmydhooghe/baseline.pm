@@ -110,7 +110,14 @@ class Organization extends Model
     public function publishRateCardVersion(array $roles, ?User $publishedBy = null): RateCardVersion
     {
         return DB::transaction(function () use ($roles, $publishedBy): RateCardVersion {
-            $latestVersion = (int) $this->rateCardVersions()->lockForUpdate()->max('version');
+            /*
+             * PostgreSQL refuses FOR UPDATE on aggregate queries, so concurrent
+             * publishes are serialized by locking the organization row instead
+             * of the MAX(version) read itself.
+             */
+            self::query()->whereKey($this->id)->lockForUpdate()->first();
+
+            $latestVersion = (int) $this->rateCardVersions()->max('version');
 
             $version = $this->rateCardVersions()->create([
                 'version' => $latestVersion + 1,

@@ -28,7 +28,7 @@ class StoreRateCardVersionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'roles' => ['required', 'array', 'min:1'],
+            'roles' => ['required', 'list', 'min:1'],
             'roles.*.name' => ['required', 'string', 'max:255', 'distinct:ignore_case'],
             'roles.*.cost_per_day' => ['required', 'numeric', 'decimal:0,2', 'min:0', 'max:1000000'],
             'roles.*.sell_per_day' => ['required', 'numeric', 'decimal:0,2', 'min:0', 'max:1000000'],

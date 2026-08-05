@@ -156,6 +156,18 @@ test('rates must be non-negative amounts with at most two decimals', function ()
         ->assertInvalid(['roles.0.cost_per_day', 'roles.0.sell_per_day']);
 });
 
+test('roles keyed by name instead of a list are refused', function () {
+    $manager = User::factory()->role(UserRole::CommercialManager)->create();
+
+    $this->actingAs($manager)
+        ->post(route('organization.rate-card.store'), [
+            'roles' => [
+                'developer' => ['name' => 'Developer', 'cost_per_day' => '450', 'sell_per_day' => '780'],
+            ],
+        ])
+        ->assertInvalid(['roles']);
+});
+
 test('a rate card without roles is refused', function () {
     $manager = User::factory()->role(UserRole::CommercialManager)->create();
 
