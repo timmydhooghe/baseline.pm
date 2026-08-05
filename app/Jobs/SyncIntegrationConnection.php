@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Enums\EngagementStatus;
 use App\Enums\IntegrationConnectionStatus;
 use App\Models\IntegrationConnection;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -44,6 +45,12 @@ class SyncIntegrationConnection implements ShouldQueue
         Context::add('organization_id', $this->integration->organization_id);
 
         if ($this->integration->status !== IntegrationConnectionStatus::Connected) {
+            return;
+        }
+
+        // Archived engagements are read-only — a job queued before the
+        // archival must not keep writing work into them.
+        if ($this->integration->engagement->status === EngagementStatus::Archived) {
             return;
         }
 

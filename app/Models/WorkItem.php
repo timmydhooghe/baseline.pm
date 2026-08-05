@@ -106,8 +106,13 @@ class WorkItem extends Model
 
         $this->setRelation('link', $link);
 
+        /*
+         * afterCommit: the caller may hold an open bulk transaction, and the
+         * queue is Redis — without it a rollback would leave already-queued
+         * jobs commenting on mappings that never existed.
+         */
         if ($this->external_id !== null && $this->integration?->status === IntegrationConnectionStatus::Connected) {
-            PushWorkItemLink::dispatch($this, $deliverable);
+            PushWorkItemLink::dispatch($this, $deliverable)->afterCommit();
         }
 
         return $link;

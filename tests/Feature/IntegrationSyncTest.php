@@ -1,14 +1,17 @@
 <?php
 
+use App\Enums\EngagementStatus;
 use App\Enums\EstimateUnit;
 use App\Enums\SyncRunStatus;
 use App\Enums\WorkItemSource;
 use App\Enums\WorkItemState;
 use App\Jobs\SyncIntegrationConnection;
+use App\Models\Engagement;
 use App\Models\IntegrationConnection;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 /**
  * @return list<array<string, mixed>>
@@ -156,8 +159,8 @@ test('a linear sync imports issues and releases without worklogs', function () {
 
         if (str_contains($query, 'releases(')) {
             return Http::response(['data' => ['releases' => ['nodes' => [
-                ['id' => 'rel-1', 'name' => 'Portal beta', 'status' => 'released', 'targetDate' => '2026-07-20', 'url' => null],
-            ]]]]);
+                ['id' => 'rel-1', 'name' => 'Portal beta', 'targetDate' => '2026-07-20', 'completedAt' => '2026-07-20T09:00:00.000Z', 'url' => null],
+            ], 'pageInfo' => ['hasNextPage' => false, 'endCursor' => null]]]]);
         }
 
         return Http::response([], 404);
@@ -175,6 +178,103 @@ test('a linear sync imports issues and releases without worklogs', function () {
         ->and($item->estimate_unit)->toBe(EstimateUnit::Points)
         ->and($item->worklogs()->count())->toBe(0)
         ->and($connection->engagement->releases()->sole()->released)->toBeTrue();
+});
+
+test('a jira sync follows the search pagination to the end', function () {
+    Http::fake(function (Request $request) {
+        $url = $request->url();
+
+        if (str_contains($url, '/rest/api/3/search/jql')) {
+            if (str_contains($url, 'nextPageToken=page-2')) {
+                return Http::response(['issues' => [jiraIssues()[1]]]);
+            }
+
+            return Http::response(['issues' => [jiraIssues()[0]], 'nextPageToken' => 'page-2']);
+        }
+
+        if (str_contains($url, '/versions')) {
+            return Http::response([]);
+        }
+
+        return Http::response([], 404);
+    });
+
+    $connection = IntegrationConnection::factory()->create();
+
+    (new SyncIntegrationConnection($connection))->handle();
+
+    expect($connection->engagement->workItems()->pluck('external_key')->sort()->values()->all())
+        ->toBe(['ENG-1', 'ENG-2']);
+});
+
+test('a jira issue with more worklogs than the search embeds fetches the complete list', function () {
+    $issue = jiraIssues()[0];
+    $issue['fields']['worklog'] = ['total' => 3, 'maxResults' => 1, 'worklogs' => [$issue['fields']['worklog']['worklogs'][0]]];
+
+    Http::fake(function (Request $request) use ($issue) {
+        $url = $request->url();
+
+        if (str_contains($url, '/rest/api/3/issue/ENG-1/worklog')) {
+            return Http::response(['total' => 3, 'worklogs' => [
+                ['id' => '20001', 'author' => ['displayName' => 'Dana Developer'], 'timeSpentSeconds' => 7200, 'started' => '2026-08-01T09:00:00.000+0000'],
+                ['id' => '20002', 'author' => ['displayName' => 'Dana Developer'], 'timeSpentSeconds' => 3600, 'started' => '2026-08-02T09:00:00.000+0000'],
+                ['id' => '20003', 'author' => ['displayName' => 'Sam Ops'], 'timeSpentSeconds' => 1800, 'started' => '2026-08-03T09:00:00.000+0000'],
+            ]]);
+        }
+
+        if (str_contains($url, '/rest/api/3/search/jql')) {
+            return Http::response(['issues' => [$issue]]);
+        }
+
+        if (str_contains($url, '/versions')) {
+            return Http::response([]);
+        }
+
+        return Http::response([], 404);
+    });
+
+    $connection = IntegrationConnection::factory()->create();
+
+    (new SyncIntegrationConnection($connection))->handle();
+
+    $item = $connection->engagement->workItems()->where('external_key', 'ENG-1')->sole();
+
+    expect($item->worklogs()->count())->toBe(3)
+        ->and((int) $item->worklogs()->sum('seconds'))->toBe(12600);
+});
+
+test('a linear sync follows the cursor pagination to the end', function () {
+    Http::fake(function (Request $request) {
+        $query = (string) ($request->data()['query'] ?? '');
+        $after = data_get($request->data(), 'variables.after');
+
+        if (str_contains($query, 'issues(')) {
+            if ($after === 'cursor-1') {
+                return Http::response(['data' => ['issues' => [
+                    'nodes' => [['id' => 'lin-2', 'identifier' => 'ENG-8', 'title' => 'Second page item', 'state' => ['name' => 'Todo', 'type' => 'unstarted']]],
+                    'pageInfo' => ['hasNextPage' => false, 'endCursor' => null],
+                ]]]);
+            }
+
+            return Http::response(['data' => ['issues' => [
+                'nodes' => [['id' => 'lin-1', 'identifier' => 'ENG-7', 'title' => 'First page item', 'state' => ['name' => 'Todo', 'type' => 'unstarted']]],
+                'pageInfo' => ['hasNextPage' => true, 'endCursor' => 'cursor-1'],
+            ]]]);
+        }
+
+        if (str_contains($query, 'releases(')) {
+            return Http::response(['data' => ['releases' => ['nodes' => [], 'pageInfo' => ['hasNextPage' => false, 'endCursor' => null]]]]);
+        }
+
+        return Http::response([], 404);
+    });
+
+    $connection = IntegrationConnection::factory()->linear()->create();
+
+    (new SyncIntegrationConnection($connection))->handle();
+
+    expect($connection->engagement->workItems()->pluck('external_key')->sort()->values()->all())
+        ->toBe(['ENG-7', 'ENG-8']);
 });
 
 test('a provider failure marks the run failed and rethrows for the queue to retry', function () {
@@ -202,4 +302,37 @@ test('a sync pass skips quietly when the connection was disconnected in the mean
     expect($connection->syncRuns()->count())->toBe(0);
 
     Http::assertNothingSent();
+});
+
+test('a sync pass skips quietly when the engagement was archived in the meantime', function () {
+    Http::fake();
+
+    $engagement = Engagement::factory()->status(EngagementStatus::Archived)->create();
+    $connection = IntegrationConnection::factory()
+        ->for($engagement->organization)
+        ->for($engagement)
+        ->create();
+
+    (new SyncIntegrationConnection($connection))->handle();
+
+    expect($connection->syncRuns()->count())->toBe(0);
+
+    Http::assertNothingSent();
+});
+
+test('the scheduled sync skips archived engagements — they are read-only', function () {
+    Queue::fake();
+
+    $activeConnection = IntegrationConnection::factory()->create();
+
+    $archived = Engagement::factory()->status(EngagementStatus::Archived)->create();
+    IntegrationConnection::factory()
+        ->for($archived->organization)
+        ->for($archived)
+        ->create();
+
+    $this->artisan('integrations:sync')->assertSuccessful();
+
+    Queue::assertPushed(SyncIntegrationConnection::class, 1);
+    Queue::assertPushed(SyncIntegrationConnection::class, fn (SyncIntegrationConnection $job): bool => $job->integration->is($activeConnection));
 });

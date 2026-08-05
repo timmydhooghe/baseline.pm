@@ -76,23 +76,22 @@ class DatabaseSeeder extends Seeder
 
         $engagements = [
             [EngagementStatus::Draft, 'ERP rollout'],
-            [EngagementStatus::Active, 'Data platform'],
             [EngagementStatus::Archived, 'Website relaunch'],
         ];
 
-        $active = null;
-
         foreach ($engagements as [$status, $name]) {
-            $engagement = Engagement::factory()
+            Engagement::factory()
                 ->for($organization)
                 ->for($customer)
                 ->status($status)
                 ->create(['name' => $name]);
-
-            if ($status === EngagementStatus::Active) {
-                $active = $engagement;
-            }
         }
+
+        $active = Engagement::factory()
+            ->for($organization)
+            ->for($customer)
+            ->status(EngagementStatus::Active)
+            ->create(['name' => 'Data platform']);
 
         /*
          * Standalone-mode execution work on the active engagement (FA-7):

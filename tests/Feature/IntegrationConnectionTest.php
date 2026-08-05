@@ -73,6 +73,24 @@ test('a delivery manager connects linear with an api key only', function () {
         ->and($connection->base_url)->toBeNull();
 });
 
+test('jira urls outside atlassian cloud are rejected — the server would request them itself', function (string $url) {
+    $user = User::factory()->role(UserRole::DeliveryManager)->create();
+    $engagement = Engagement::factory()->for($user->organization)->status(EngagementStatus::Active)->create();
+
+    $this->actingAs($user)
+        ->post(route('engagements.integrations.store', $engagement), [...jiraConnectPayload(), 'base_url' => $url])
+        ->assertInvalid(['base_url']);
+
+    expect(IntegrationConnection::query()->count())->toBe(0);
+})->with([
+    'loopback' => ['https://127.0.0.1'],
+    'cloud metadata service' => ['https://169.254.169.254/latest/meta-data'],
+    'internal hostname' => ['https://jira.internal.corp'],
+    'plain http' => ['http://example.atlassian.net'],
+    'custom port' => ['https://example.atlassian.net:8443'],
+    'lookalike domain' => ['https://evilatlassian.net'],
+]);
+
 test('jira requires a site url and account email', function () {
     $user = User::factory()->role(UserRole::DeliveryManager)->create();
     $engagement = Engagement::factory()->for($user->organization)->status(EngagementStatus::Active)->create();

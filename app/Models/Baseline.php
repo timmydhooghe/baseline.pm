@@ -11,6 +11,7 @@ use App\Models\Concerns\BelongsToOrganization;
 use App\Models\Concerns\RecordsAuditLog;
 use App\ValueObjects\Money;
 use Carbon\CarbonImmutable;
+use Closure;
 use Database\Factories\BaselineFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Collection;
@@ -45,7 +46,7 @@ use LogicException;
  * @property Carbon $end_date
  * @property ExecutionMode $execution_mode
  * @property string|null $rate_card_version_id
- * @property array<string, array{acknowledged_by: string, acknowledged_by_name: string, acknowledged_at: string}> $acknowledged_checks
+ * @property array<string, array{acknowledged_by: string, acknowledged_by_name: string, acknowledged_at: string, fingerprint?: string}> $acknowledged_checks
  * @property string|null $review_snapshot_id
  * @property string|null $customer_snapshot_id
  * @property CarbonImmutable|null $submitted_at
@@ -118,31 +119,71 @@ class Baseline extends Model
     }
 
     /**
+     * Run a draft mutation serialized against submission and other editors:
+     * the baseline row is locked, its state re-read under the lock, and the
+     * mutation refused if the baseline left draft in the meantime. Every
+     * write to a draft (details, items, documents, role mix, acknowledgements)
+     * goes through here so nothing can slip in beside a submission snapshot.
+     *
+     * @template TReturn
+     *
+     * @param  Closure(): TReturn  $mutation
+     * @return TReturn
+     */
+    public function mutateAsDraft(Closure $mutation): mixed
+    {
+        return DB::transaction(function () use ($mutation): mixed {
+            self::query()->whereKey($this->id)->lockForUpdate()->first();
+
+            $this->unsetRelations();
+            $this->refresh();
+
+            if ($this->status !== BaselineStatus::Draft) {
+                throw ValidationException::withMessages([
+                    'baseline' => __('This baseline left draft while you were editing it.'),
+                ]);
+            }
+
+            return $mutation();
+        });
+    }
+
+    /**
      * Submit the draft for customer approval: freeze an internal review
      * snapshot plus a customer-facing one with all cost and margin stripped,
      * then move the engagement to awaiting baseline approval. Every failing
      * completeness check must have been fixed or acknowledged.
+     *
+     * The baseline row is locked and all state re-read under that lock, so
+     * the snapshots freeze exactly the committed draft — concurrent draft
+     * edits either land before the freeze or are refused by mutateAsDraft().
      */
     public function submitForApproval(?User $submitter = null): void
     {
-        if (! $this->status->canTransitionTo(BaselineStatus::AwaitingApproval)) {
-            throw new LogicException("A baseline cannot be submitted from [{$this->status->value}].");
-        }
-
-        $unresolved = array_column(
-            array_filter($this->completenessChecks(), fn (array $check): bool => ! $check['passed'] && ! $check['acknowledged']),
-            'label',
-        );
-
-        if ($unresolved !== []) {
-            throw ValidationException::withMessages([
-                'checks' => __('Fix or acknowledge every completeness warning before submitting: :checks', [
-                    'checks' => implode(' ', $unresolved),
-                ]),
-            ]);
-        }
-
         DB::transaction(function () use ($submitter): void {
+            self::query()->whereKey($this->id)->lockForUpdate()->first();
+
+            $this->unsetRelations();
+            $this->refresh();
+            $this->load(['items.owner', 'allocations.role', 'documents', 'rateCardVersion', 'engagement.customer']);
+
+            if (! $this->status->canTransitionTo(BaselineStatus::AwaitingApproval)) {
+                throw new LogicException("A baseline cannot be submitted from [{$this->status->value}].");
+            }
+
+            $unresolved = array_column(
+                array_filter($this->completenessChecks(), fn (array $check): bool => ! $check['passed'] && ! $check['acknowledged']),
+                'label',
+            );
+
+            if ($unresolved !== []) {
+                throw ValidationException::withMessages([
+                    'checks' => __('Fix or acknowledge every completeness warning before submitting: :checks', [
+                        'checks' => implode(' ', $unresolved),
+                    ]),
+                ]);
+            }
+
             $review = Snapshot::capture($this, $this->snapshotPayload(internal: true), $submitter);
             $customer = Snapshot::capture($this, $this->snapshotPayload(internal: false), $submitter);
 
@@ -294,22 +335,33 @@ class Baseline extends Model
 
     /**
      * Record that a manager accepts a failing completeness check as-is.
+     * Only a check that is failing right now can be acknowledged, and the
+     * acknowledgement is fingerprinted to the exact failure it accepted —
+     * if the underlying data changes afterwards, the acknowledgement stops
+     * counting and the check blocks submission again.
      */
     public function acknowledgeCheck(string $key, User $user): void
     {
-        if ($this->status !== BaselineStatus::Draft) {
-            throw new LogicException('Completeness warnings can only be acknowledged on a draft baseline.');
-        }
+        $this->mutateAsDraft(function () use ($key, $user): void {
+            $check = collect($this->completenessChecks())->firstWhere('key', $key);
 
-        $acknowledged = $this->acknowledged_checks;
-        $acknowledged[$key] = [
-            'acknowledged_by' => $user->id,
-            'acknowledged_by_name' => $user->name,
-            'acknowledged_at' => now()->toIso8601String(),
-        ];
+            if ($check === null || $check['passed']) {
+                throw ValidationException::withMessages([
+                    'check' => __('Only a failing completeness check can be acknowledged.'),
+                ]);
+            }
 
-        $this->acknowledged_checks = $acknowledged;
-        $this->save();
+            $acknowledged = $this->acknowledged_checks;
+            $acknowledged[$key] = [
+                'acknowledged_by' => $user->id,
+                'acknowledged_by_name' => $user->name,
+                'acknowledged_at' => now()->toIso8601String(),
+                'fingerprint' => $this->checkFingerprint($check['detail']),
+            ];
+
+            $this->acknowledged_checks = $acknowledged;
+            $this->save();
+        });
     }
 
     /**
@@ -372,10 +424,18 @@ class Baseline extends Model
             /** @var Money $itemDirect */
             $itemDirect = $direct[$item->id];
 
+            /*
+             * The pro-rata share is computed via a float ratio instead of
+             * intdiv(management × direct, total): two cent amounts multiplied
+             * together overflow 64-bit integers for perfectly valid budgets.
+             * Each factor stays far below 2^53, the ratio is exact to ~1e-16,
+             * and the last deliverable absorbs the remainder so the shares
+             * always sum to the exact delivery-management total in cents.
+             */
             $share = match (true) {
                 $index === $deliverables->count() - 1 => $management->amount - $assigned,
                 $directTotal->isZero() => intdiv($management->amount, $deliverables->count()),
-                default => intdiv($management->amount * $itemDirect->amount, $directTotal->amount),
+                default => (int) floor($itemDirect->amount / $directTotal->amount * $management->amount),
             };
             $assigned += $share;
 
@@ -561,21 +621,32 @@ class Baseline extends Model
     }
 
     /**
+     * An acknowledgement only counts while the failure it accepted is still
+     * the current one — the fingerprint ties it to the detail text it was
+     * recorded against.
+     *
      * @return array{key: string, label: string, passed: bool, detail: string, acknowledged: bool, acknowledgedBy: string|null, acknowledgedAt: string|null}
      */
     private function check(string $key, string $label, bool $passed, string $detail): array
     {
         $acknowledgement = $this->acknowledged_checks[$key] ?? null;
+        $current = $acknowledgement !== null
+            && ($acknowledgement['fingerprint'] ?? null) === $this->checkFingerprint($detail);
 
         return [
             'key' => $key,
             'label' => $label,
             'passed' => $passed,
             'detail' => $detail,
-            'acknowledged' => $acknowledgement !== null,
-            'acknowledgedBy' => $acknowledgement['acknowledged_by_name'] ?? null,
-            'acknowledgedAt' => $acknowledgement['acknowledged_at'] ?? null,
+            'acknowledged' => $current,
+            'acknowledgedBy' => $current ? $acknowledgement['acknowledged_by_name'] : null,
+            'acknowledgedAt' => $current ? $acknowledgement['acknowledged_at'] : null,
         ];
+    }
+
+    private function checkFingerprint(string $detail): string
+    {
+        return hash('sha256', $detail);
     }
 
     /**

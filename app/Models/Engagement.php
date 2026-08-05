@@ -74,25 +74,33 @@ class Engagement extends Model
 
     /**
      * Move the engagement to the next lifecycle status, refusing moves the
-     * EngagementStatus state machine does not allow.
+     * EngagementStatus state machine does not allow. Runs under a row lock
+     * in one transaction: concurrent decisions would otherwise both read
+     * the same status, each pass validation, and leave the engagement and
+     * its submitted baseline pointing in different directions.
      */
     public function transitionTo(EngagementStatus $target): void
     {
-        $from = $this->status;
+        DB::transaction(function () use ($target): void {
+            self::query()->whereKey($this->id)->lockForUpdate()->first();
+            $this->refresh();
 
-        if (! $from->canTransitionTo($target)) {
-            throw new LogicException("An engagement cannot move from [{$from->value}] to [{$target->value}].");
-        }
+            $from = $this->status;
 
-        $this->status = $target;
-        $this->save();
+            if (! $from->canTransitionTo($target)) {
+                throw new LogicException("An engagement cannot move from [{$from->value}] to [{$target->value}].");
+            }
 
-        AuditLog::record('engagement.transitioned', $this, [
-            'from' => $from->value,
-            'to' => $target->value,
-        ]);
+            $this->status = $target;
+            $this->save();
 
-        $this->syncSubmittedBaseline($from, $target);
+            AuditLog::record('engagement.transitioned', $this, [
+                'from' => $from->value,
+                'to' => $target->value,
+            ]);
+
+            $this->syncSubmittedBaseline($from, $target);
+        });
     }
 
     /**

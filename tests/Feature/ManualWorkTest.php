@@ -103,6 +103,24 @@ test('portfolio viewers cannot record work', function () {
         ->assertForbidden();
 });
 
+test('work on an archived engagement is read-only', function () {
+    $user = User::factory()->role(UserRole::DeliveryManager)->create();
+    $engagement = Engagement::factory()->for($user->organization)->status(EngagementStatus::Archived)->create();
+    $item = WorkItem::factory()->for($user->organization)->for($engagement)->create();
+
+    $this->actingAs($user)
+        ->post(route('engagements.work-items.store', $engagement), ['title' => 'Late addition', 'state' => 'todo'])
+        ->assertForbidden();
+
+    $this->actingAs($user)
+        ->patch(route('work-items.update', $item), ['title' => 'Renamed after archival'])
+        ->assertForbidden();
+
+    $this->actingAs($user)
+        ->post(route('work-items.worklogs.store', $item), ['hours' => 2, 'logged_on' => now()->toDateString()])
+        ->assertForbidden();
+});
+
 test('connecting a tool later keeps the manual history — standalone upgrades without loss', function () {
     Queue::fake();
 

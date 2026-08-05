@@ -199,6 +199,23 @@ test('unlinking removes the mapping and stays on the audit record', function () 
         ->and(AuditLog::query()->where('action', 'work_item.unlinked')->exists())->toBeTrue();
 });
 
+test('mappings on an archived engagement cannot be unlinked — the record is frozen', function () {
+    Queue::fake();
+
+    ['user' => $user, 'engagement' => $engagement, 'deliverable' => $deliverable] = mappingSetup();
+
+    $item = WorkItem::factory()->for($user->organization)->for($engagement)->create();
+    $item->linkTo($deliverable, $user);
+
+    $engagement->forceFill(['status' => EngagementStatus::Archived])->save();
+
+    $this->actingAs($user)
+        ->delete(route('work-items.link.destroy', $item))
+        ->assertForbidden();
+
+    expect($item->refresh()->link)->not->toBeNull();
+});
+
 test('mapping a synced jira item posts a comment back on the issue', function () {
     Http::fake();
 

@@ -2,16 +2,19 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\EngagementStatus;
 use App\Enums\IntegrationConnectionStatus;
 use App\Jobs\SyncIntegrationConnection;
 use App\Models\IntegrationConnection;
 use App\Models\Scopes\OrganizationScope;
 use Illuminate\Console\Command;
+use Illuminate\Contracts\Database\Eloquent\Builder;
 
 /**
  * Queue a sync pass for every connected integration, across all tenants —
  * the scheduled half of the two-way sync (FA-7). Each job carries its own
- * organization context.
+ * organization context. Archived engagements are read-only, so their
+ * connections are skipped.
  */
 class SyncIntegrations extends Command
 {
@@ -24,6 +27,7 @@ class SyncIntegrations extends Command
         $connections = IntegrationConnection::query()
             ->withoutGlobalScope(OrganizationScope::class)
             ->where('status', IntegrationConnectionStatus::Connected)
+            ->whereHas('engagement', fn (Builder $query) => $query->whereNot('status', EngagementStatus::Archived))
             ->get();
 
         foreach ($connections as $connection) {

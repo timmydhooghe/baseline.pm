@@ -12,13 +12,21 @@ use RuntimeException;
 /**
  * Linear GraphQL client, authenticated with a personal or OAuth API key and
  * scoped to one team by key. Linear state types normalize onto
- * WorkItemState; estimates are points. Linear has no native time tracking,
- * so issues sync without worklogs — standalone burn entry covers time there
- * (FA-16).
+ * WorkItemState; estimates are points. Releases carry their lifecycle in the
+ * pipeline stage timestamps — completedAt set means shipped (there is no
+ * status field on Release). Both connections follow cursor pagination to
+ * completion. Linear has no native time tracking, so issues sync without
+ * worklogs — standalone burn entry covers time there (FA-16).
  */
 final readonly class LinearClient implements ProviderClient
 {
     private const string ENDPOINT = 'https://api.linear.app/graphql';
+
+    /**
+     * Safety valve against a runaway pagination loop; far above any project
+     * this product governs.
+     */
+    private const int MAX_SYNCED_ISSUES = 5000;
 
     public function __construct(
         private string $apiToken,
@@ -27,67 +35,91 @@ final readonly class LinearClient implements ProviderClient
 
     public function fetchIssues(): array
     {
-        $response = $this->query(
-            <<<'GRAPHQL'
-            query Issues($team: String!) {
-              issues(filter: { team: { key: { eq: $team } } }, first: 100) {
-                nodes {
-                  id
-                  identifier
-                  title
-                  url
-                  estimate
-                  updatedAt
-                  state { name type }
-                  assignee { name }
+        $issues = [];
+        $cursor = null;
+
+        do {
+            $response = $this->query(
+                <<<'GRAPHQL'
+                query Issues($team: String!, $after: String) {
+                  issues(filter: { team: { key: { eq: $team } } }, first: 100, after: $after) {
+                    nodes {
+                      id
+                      identifier
+                      title
+                      url
+                      estimate
+                      updatedAt
+                      state { name type }
+                      assignee { name }
+                    }
+                    pageInfo { hasNextPage endCursor }
+                  }
                 }
-              }
+                GRAPHQL,
+                array_filter(['team' => $this->teamKey, 'after' => $cursor]),
+            );
+
+            /** @var list<array<string, mixed>> $nodes */
+            $nodes = $response->json('data.issues.nodes', []);
+
+            foreach ($nodes as $node) {
+                $issues[] = new SyncedIssue(
+                    externalId: (string) $node['id'],
+                    externalKey: data_get($node, 'identifier'),
+                    title: (string) $node['title'],
+                    externalStatus: data_get($node, 'state.name'),
+                    state: $this->state((string) data_get($node, 'state.type', 'backlog')),
+                    type: null,
+                    assigneeName: data_get($node, 'assignee.name'),
+                    url: data_get($node, 'url'),
+                    estimateValue: isset($node['estimate']) ? (float) $node['estimate'] : null,
+                    estimateUnit: isset($node['estimate']) ? EstimateUnit::Points : null,
+                    externalUpdatedAt: isset($node['updatedAt']) ? CarbonImmutable::parse((string) $node['updatedAt']) : null,
+                );
             }
-            GRAPHQL,
-            ['team' => $this->teamKey],
-        );
 
-        /** @var list<array<string, mixed>> $nodes */
-        $nodes = $response->json('data.issues.nodes', []);
+            $cursor = $this->nextCursor($response, 'data.issues.pageInfo');
+        } while ($cursor !== null && $nodes !== [] && count($issues) < self::MAX_SYNCED_ISSUES);
 
-        return array_map(fn (array $node): SyncedIssue => new SyncedIssue(
-            externalId: (string) $node['id'],
-            externalKey: data_get($node, 'identifier'),
-            title: (string) $node['title'],
-            externalStatus: data_get($node, 'state.name'),
-            state: $this->state((string) data_get($node, 'state.type', 'backlog')),
-            type: null,
-            assigneeName: data_get($node, 'assignee.name'),
-            url: data_get($node, 'url'),
-            estimateValue: isset($node['estimate']) ? (float) $node['estimate'] : null,
-            estimateUnit: isset($node['estimate']) ? EstimateUnit::Points : null,
-            externalUpdatedAt: isset($node['updatedAt']) ? CarbonImmutable::parse((string) $node['updatedAt']) : null,
-        ), $nodes);
+        return $issues;
     }
 
     public function fetchReleases(): array
     {
-        $response = $this->query(
-            <<<'GRAPHQL'
-            query Releases($team: String!) {
-              releases(filter: { team: { key: { eq: $team } } }, first: 50) {
-                nodes { id name status targetDate url }
-              }
+        $releases = [];
+        $cursor = null;
+
+        do {
+            $response = $this->query(
+                <<<'GRAPHQL'
+                query Releases($team: String!, $after: String) {
+                  releases(filter: { team: { key: { eq: $team } } }, first: 50, after: $after) {
+                    nodes { id name url targetDate completedAt }
+                    pageInfo { hasNextPage endCursor }
+                  }
+                }
+                GRAPHQL,
+                array_filter(['team' => $this->teamKey, 'after' => $cursor]),
+            );
+
+            /** @var list<array<string, mixed>> $nodes */
+            $nodes = $response->json('data.releases.nodes', []);
+
+            foreach ($nodes as $node) {
+                $releases[] = new SyncedRelease(
+                    externalId: (string) $node['id'],
+                    name: (string) $node['name'],
+                    released: isset($node['completedAt']),
+                    releasedOn: isset($node['completedAt']) ? CarbonImmutable::parse((string) $node['completedAt']) : null,
+                    url: data_get($node, 'url'),
+                );
             }
-            GRAPHQL,
-            ['team' => $this->teamKey],
-        );
 
-        /** @var list<array<string, mixed>> $nodes */
-        $nodes = $response->json('data.releases.nodes', []);
+            $cursor = $this->nextCursor($response, 'data.releases.pageInfo');
+        } while ($cursor !== null && $nodes !== []);
 
-        return array_map(fn (array $node): SyncedRelease => new SyncedRelease(
-            externalId: (string) $node['id'],
-            name: (string) $node['name'],
-            released: data_get($node, 'status') === 'released',
-            releasedOn: isset($node['targetDate']) ? CarbonImmutable::parse((string) $node['targetDate']) : null,
-            url: data_get($node, 'url'),
-        ), $nodes);
+        return $releases;
     }
 
     public function postIssueComment(string $issueId, string $body): void
@@ -110,6 +142,17 @@ final readonly class LinearClient implements ProviderClient
             'canceled' => WorkItemState::Canceled,
             default => WorkItemState::Todo,
         };
+    }
+
+    private function nextCursor(Response $response, string $pageInfoPath): ?string
+    {
+        if ($response->json("{$pageInfoPath}.hasNextPage") !== true) {
+            return null;
+        }
+
+        $cursor = $response->json("{$pageInfoPath}.endCursor");
+
+        return is_string($cursor) ? $cursor : null;
     }
 
     /**

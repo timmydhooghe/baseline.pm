@@ -29,13 +29,15 @@ class WorkItemPolicy
 
     /**
      * Only manual items are edited by hand — synced items mirror their
-     * provider and change through sync runs.
+     * provider and change through sync runs — and never on an archived
+     * engagement.
      */
     public function update(User $user, WorkItem $workItem): bool
     {
         return $user->role->updatesExecution()
             && $user->organization_id === $workItem->organization_id
-            && $workItem->source === WorkItemSource::Manual;
+            && $workItem->source === WorkItemSource::Manual
+            && $workItem->engagement->status !== EngagementStatus::Archived;
     }
 
     public function recordWorklog(User $user, WorkItem $workItem): bool
@@ -57,6 +59,7 @@ class WorkItemPolicy
     public function link(User $user, WorkItem $workItem): bool
     {
         return $user->role->updatesExecution()
-            && $user->organization_id === $workItem->organization_id;
+            && $user->organization_id === $workItem->organization_id
+            && $workItem->engagement->status !== EngagementStatus::Archived;
     }
 }
