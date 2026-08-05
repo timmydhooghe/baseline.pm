@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\UserRole;
+use App\Models\IntegrationAccount;
 use App\Models\Invitation;
 use App\Models\RateCardVersion;
 use App\Models\User;
@@ -74,6 +75,7 @@ class OrganizationController extends Controller
             'can' => [
                 'manageMembers' => $managesMembers,
                 'viewRateCard' => $user->can('viewAny', RateCardVersion::class),
+                'viewIntegrations' => $user->can('viewAny', IntegrationAccount::class),
             ],
         ]);
     }

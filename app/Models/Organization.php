@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\EngagementStatus;
+use App\Enums\IntegrationProvider;
 use App\Enums\Plan;
 use App\Models\Concerns\RecordsAuditLog;
 use App\ValueObjects\Money;
@@ -31,6 +32,7 @@ use Illuminate\Validation\ValidationException;
  * @property-read Collection<int, Engagement> $engagements
  * @property-read Collection<int, Invitation> $invitations
  * @property-read Collection<int, RateCardVersion> $rateCardVersions
+ * @property-read Collection<int, IntegrationAccount> $integrationAccounts
  */
 #[Fillable(['name'])]
 class Organization extends Model
@@ -93,6 +95,45 @@ class Organization extends Model
     public function rateCardVersions(): HasMany
     {
         return $this->hasMany(RateCardVersion::class);
+    }
+
+    /**
+     * @return HasMany<IntegrationAccount, $this>
+     */
+    public function integrationAccounts(): HasMany
+    {
+        return $this->hasMany(IntegrationAccount::class);
+    }
+
+    /**
+     * Add a provider account whose credentials engagements connect through
+     * (FA-7). Owner-only; the audit entry never contains the secret.
+     *
+     * @param  array<string, string>  $credentials
+     */
+    public function addIntegrationAccount(
+        IntegrationProvider $provider,
+        string $name,
+        array $credentials,
+        ?string $baseUrl = null,
+        ?User $actor = null,
+    ): IntegrationAccount {
+        $account = new IntegrationAccount([
+            'provider' => $provider,
+            'name' => $name,
+            'base_url' => $baseUrl,
+            'credentials' => $credentials,
+            'created_by' => $actor?->id,
+        ]);
+        $account->organization_id = $this->id;
+        $account->save();
+
+        AuditLog::record('integration_account.created', $account, [
+            'provider' => $provider->value,
+            'name' => $name,
+        ], $actor);
+
+        return $account;
     }
 
     /**

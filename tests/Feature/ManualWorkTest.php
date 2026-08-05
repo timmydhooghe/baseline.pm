@@ -7,6 +7,7 @@ use App\Enums\WorkItemSource;
 use App\Enums\WorkItemState;
 use App\Models\AuditLog;
 use App\Models\Engagement;
+use App\Models\IntegrationAccount;
 use App\Models\User;
 use App\Models\WorkItem;
 use Illuminate\Support\Facades\Queue;
@@ -125,14 +126,14 @@ test('connecting a tool later keeps the manual history — standalone upgrades w
     Queue::fake();
 
     $user = User::factory()->role(UserRole::DeliveryManager)->create();
+    $account = IntegrationAccount::factory()->linear()->for($user->organization)->create();
     $engagement = Engagement::factory()->for($user->organization)->status(EngagementStatus::Active)->create();
     WorkItem::factory()->count(3)->for($user->organization)->for($engagement)->create();
 
     $this->actingAs($user)
         ->post(route('engagements.integrations.store', $engagement), [
-            'provider' => 'linear',
+            'integration_account_id' => $account->id,
             'external_project_key' => 'ENG',
-            'api_token' => 'lin_api_secret',
         ])
         ->assertRedirect();
 

@@ -3,10 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Enums\BaselineItemType;
-use App\Enums\IntegrationProvider;
 use App\Enums\WorkItemState;
 use App\Models\BaselineItem;
 use App\Models\Engagement;
+use App\Models\IntegrationAccount;
 use App\Models\IntegrationConnection;
 use App\Models\Release;
 use App\Models\SyncRun;
@@ -53,7 +53,9 @@ class WorkController extends Controller
                 'executionMode' => $baseline?->execution_mode->value,
                 'executionModeLabel' => $baseline?->execution_mode->label(),
             ],
-            'connections' => $engagement->integrationConnections
+            'connections' => $engagement->integrationConnections()
+                ->with('account')
+                ->get()
                 ->map(fn (IntegrationConnection $connection): array => $this->connectionViewModel($connection))
                 ->values(),
             'workItems' => $workItems
@@ -84,11 +86,18 @@ class WorkController extends Controller
                 ])
                 ->values(),
             'baselineVersion' => $baseline?->version,
-            'providers' => collect(IntegrationProvider::cases())
-                ->map(fn (IntegrationProvider $provider): array => [
-                    'value' => $provider->value,
-                    'label' => $provider->label(),
-                ]),
+            'accounts' => $user->can('viewAny', IntegrationAccount::class)
+                ? IntegrationAccount::query()
+                    ->orderBy('name')
+                    ->get()
+                    ->map(fn (IntegrationAccount $account): array => [
+                        'id' => $account->id,
+                        'provider' => $account->provider->value,
+                        'providerLabel' => $account->provider->label(),
+                        'name' => $account->name,
+                    ])
+                    ->values()
+                : [],
             'states' => collect(WorkItemState::cases())
                 ->map(fn (WorkItemState $state): array => [
                     'value' => $state->value,
@@ -96,6 +105,7 @@ class WorkController extends Controller
                 ]),
             'can' => [
                 'manageIntegrations' => $user->can('create', [IntegrationConnection::class, $engagement]),
+                'manageAccounts' => $user->can('create', IntegrationAccount::class),
                 'recordWork' => $user->can('create', [WorkItem::class, $engagement]),
                 'linkWork' => $user->can('linkAny', [WorkItem::class, $engagement]),
             ],
@@ -114,7 +124,7 @@ class WorkController extends Controller
             'status' => $connection->status->value,
             'statusLabel' => $connection->status->label(),
             'externalProjectKey' => $connection->external_project_key,
-            'baseUrl' => $connection->base_url,
+            'accountName' => $connection->account?->name,
             'connectedByName' => $connection->connectedBy?->name,
             'connectedAt' => $connection->connected_at?->toFormattedDateString(),
             'disconnectedAt' => $connection->disconnected_at?->toFormattedDateString(),

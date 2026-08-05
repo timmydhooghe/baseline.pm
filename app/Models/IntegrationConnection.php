@@ -5,8 +5,6 @@ namespace App\Models;
 use App\Enums\IntegrationConnectionStatus;
 use App\Enums\IntegrationProvider;
 use App\Enums\SyncRunStatus;
-use App\Integrations\JiraClient;
-use App\Integrations\LinearClient;
 use App\Integrations\ProviderClient;
 use App\Integrations\SyncedIssue;
 use App\Integrations\SyncedRelease;
@@ -25,23 +23,23 @@ use Illuminate\Support\Carbon;
 use LogicException;
 
 /**
- * A per-engagement connection to Jira or Linear (FA-7). Disconnecting wipes
- * the credentials but keeps the row and everything it imported — history is
- * governance evidence — and reconnecting resyncs into the same record.
- * Credentials are encrypted at rest and hidden, so they never reach Inertia
- * payloads or audit entries. Audit entries are written explicitly for the
- * governance-relevant moments (connect, disconnect, reconnect) instead of
- * via RecordsAuditLog, which would log noise on every sync timestamp bump.
+ * A per-engagement connection to Jira or Linear (FA-7). Credentials live on
+ * the org-level IntegrationAccount the connection points at; the connection
+ * itself holds only which project or team syncs into the engagement.
+ * Disconnecting drops the account link but keeps the row and everything it
+ * imported — history is governance evidence — and reconnecting (re-picking
+ * an account) resyncs into the same record. Audit entries are written
+ * explicitly for the governance-relevant moments (connect, disconnect,
+ * reconnect) instead of via RecordsAuditLog, which would log noise on every
+ * sync timestamp bump.
  *
  * @property string $id
  * @property string $organization_id
  * @property string $engagement_id
+ * @property string|null $integration_account_id
  * @property IntegrationProvider $provider
  * @property IntegrationConnectionStatus $status
- * @property array<string, string>|null $credentials
- * @property string|null $base_url
  * @property string $external_project_key
- * @property string|null $external_project_name
  * @property string|null $connected_by
  * @property CarbonImmutable|null $connected_at
  * @property string|null $disconnected_by
@@ -51,13 +49,14 @@ use LogicException;
  * @property Carbon|null $updated_at
  * @property-read Organization $organization
  * @property-read Engagement $engagement
+ * @property-read IntegrationAccount|null $account
  * @property-read User|null $connectedBy
  * @property-read User|null $disconnectedBy
  * @property-read Collection<int, SyncRun> $syncRuns
  * @property-read Collection<int, WorkItem> $workItems
  * @property-read Collection<int, Release> $releases
  */
-#[Fillable(['provider', 'credentials', 'base_url', 'external_project_key', 'external_project_name', 'connected_by', 'connected_at'])]
+#[Fillable(['provider', 'integration_account_id', 'external_project_key', 'connected_by', 'connected_at'])]
 class IntegrationConnection extends Model
 {
     /** @use HasFactory<IntegrationConnectionFactory> */
@@ -73,17 +72,8 @@ class IntegrationConnection extends Model
     ];
 
     /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
-    protected $hidden = [
-        'credentials',
-    ];
-
-    /**
      * Stop syncing but retain the connection and its imported history. The
-     * credentials are wiped — reconnecting requires fresh ones.
+     * account link is dropped — reconnecting requires picking one again.
      */
     public function disconnect(?User $actor = null): void
     {
@@ -92,7 +82,7 @@ class IntegrationConnection extends Model
         }
 
         $this->status = IntegrationConnectionStatus::Disconnected;
-        $this->credentials = null;
+        $this->integration_account_id = null;
         $this->disconnected_by = $actor?->id;
         $this->disconnected_at = now();
         $this->save();
@@ -104,18 +94,21 @@ class IntegrationConnection extends Model
     }
 
     /**
-     * Reconnect a disconnected integration with fresh credentials and queue
-     * a resync into the retained history (FA-7).
-     *
-     * @param  array<string, string>  $credentials
+     * Reconnect a disconnected integration through an org account — the same
+     * one as before or another of the same provider — and queue a resync
+     * into the retained history (FA-7).
      */
-    public function reconnect(array $credentials, ?User $actor = null): void
+    public function reconnect(IntegrationAccount $account, ?User $actor = null): void
     {
         if ($this->status !== IntegrationConnectionStatus::Disconnected) {
             throw new LogicException('Only a disconnected integration can be reconnected.');
         }
 
-        $this->credentials = $credentials;
+        if ($account->provider !== $this->provider) {
+            throw new LogicException('A connection can only reconnect through an account of its own provider.');
+        }
+
+        $this->integration_account_id = $account->id;
         $this->status = IntegrationConnectionStatus::Connected;
         $this->connected_by = $actor?->id;
         $this->connected_at = now();
@@ -132,29 +125,18 @@ class IntegrationConnection extends Model
     }
 
     /**
-     * The API client for this connection's provider, built from the stored
-     * credentials.
+     * The API client for this connection, built from its account's
+     * credentials and scoped to the connection's project or team.
      */
     public function client(): ProviderClient
     {
-        $credentials = $this->credentials;
+        $account = $this->account;
 
-        if ($credentials === null) {
-            throw new LogicException('A disconnected integration has no credentials to sync with.');
+        if ($account === null) {
+            throw new LogicException('A disconnected integration has no account to sync with.');
         }
 
-        return match ($this->provider) {
-            IntegrationProvider::Jira => new JiraClient(
-                (string) $this->base_url,
-                $credentials['email'] ?? '',
-                $credentials['api_token'] ?? '',
-                $this->external_project_key,
-            ),
-            IntegrationProvider::Linear => new LinearClient(
-                $credentials['api_token'] ?? '',
-                $this->external_project_key,
-            ),
-        };
+        return $account->client($this->external_project_key);
     }
 
     /**
@@ -253,6 +235,17 @@ class IntegrationConnection extends Model
     }
 
     /**
+     * The org-level account whose credentials this connection syncs with.
+     * Named `account`, not `connection` — Eloquent owns `$connection`.
+     *
+     * @return BelongsTo<IntegrationAccount, $this>
+     */
+    public function account(): BelongsTo
+    {
+        return $this->belongsTo(IntegrationAccount::class, 'integration_account_id');
+    }
+
+    /**
      * @return BelongsTo<User, $this>
      */
     public function connectedBy(): BelongsTo
@@ -302,7 +295,6 @@ class IntegrationConnection extends Model
         return [
             'provider' => IntegrationProvider::class,
             'status' => IntegrationConnectionStatus::class,
-            'credentials' => 'encrypted:array',
             'connected_at' => 'datetime',
             'disconnected_at' => 'datetime',
             'last_synced_at' => 'datetime',

@@ -13,16 +13,17 @@ import {
 import WorkConnectDialog from '@/components/work-connect-dialog';
 import { cn } from '@/lib/utils';
 import type {
+    IntegrationAccountOption,
     IntegrationConnectionView,
-    SelectOption,
     SyncRunView,
 } from '@/types';
 
 type Props = {
     engagementId: string;
     connection: IntegrationConnectionView;
-    providers: SelectOption[];
+    accounts: IntegrationAccountOption[];
     canManage: boolean;
+    canManageAccounts: boolean;
 };
 
 const runStatusClasses: Record<SyncRunView['status'], string> = {
@@ -46,8 +47,9 @@ function runCounts(counts: Record<string, number> | null) {
 export default function WorkConnectionCard({
     engagementId,
     connection,
-    providers,
+    accounts,
     canManage,
+    canManageAccounts,
 }: Props) {
     const isConnected = connection.status === 'connected';
 
@@ -97,6 +99,8 @@ export default function WorkConnectionCard({
                             {connection.lastSyncedAt === null
                                 ? 'First sync queued — status appears here.'
                                 : `Last synced ${connection.lastSyncedAt}.`}
+                            {connection.accountName !== null &&
+                                ` Syncing via ${connection.accountName}.`}
                             {connection.connectedByName !== null &&
                                 ` Connected by ${connection.connectedByName}`}
                             {connection.connectedAt !== null &&
@@ -171,11 +175,11 @@ export default function WorkConnectionCard({
                                             {connection.providerLabel}?
                                         </DialogTitle>
                                         <DialogDescription>
-                                            Syncing stops and the credentials
-                                            are wiped. Everything already
-                                            imported is retained, and
-                                            reconnecting later resyncs into the
-                                            same history.
+                                            Syncing stops and the link to the
+                                            organization account is removed.
+                                            Everything already imported is
+                                            retained, and reconnecting later
+                                            resyncs into the same history.
                                         </DialogDescription>
                                         <DialogFooter className="gap-2">
                                             <DialogClose asChild>
@@ -196,12 +200,12 @@ export default function WorkConnectionCard({
                         ) : (
                             <WorkConnectDialog
                                 engagementId={engagementId}
-                                providers={providers}
+                                accounts={accounts}
                                 fixedProvider={connection.provider}
                                 defaultProjectKey={
                                     connection.externalProjectKey
                                 }
-                                defaultBaseUrl={connection.baseUrl}
+                                canManageAccounts={canManageAccounts}
                                 trigger={
                                     <Button
                                         variant="outline"

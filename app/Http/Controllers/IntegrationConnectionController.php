@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\IntegrationProvider;
 use App\Http\Requests\Integrations\ConnectIntegrationRequest;
 use App\Jobs\SyncIntegrationConnection;
 use App\Models\Engagement;
+use App\Models\IntegrationAccount;
 use App\Models\IntegrationConnection;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -16,13 +16,13 @@ use Inertia\Inertia;
 class IntegrationConnectionController extends Controller
 {
     /**
-     * Connect an execution tool to the engagement — or reconnect one that
-     * was disconnected earlier, resyncing into the retained history (FA-7).
+     * Connect an execution tool to the engagement through one of the
+     * organization's provider accounts — or reconnect one that was
+     * disconnected earlier, resyncing into the retained history (FA-7).
      */
     public function store(ConnectIntegrationRequest $request, Engagement $engagement): RedirectResponse
     {
         $validated = $request->validated();
-        $provider = IntegrationProvider::from($validated['provider']);
 
         $user = $request->user();
 
@@ -30,16 +30,18 @@ class IntegrationConnectionController extends Controller
             abort(403);
         }
 
+        $account = IntegrationAccount::query()
+            ->whereKey($validated['integration_account_id'])
+            ->firstOrFail();
+
         $engagement->connectIntegration(
-            $provider,
-            $request->credentials(),
+            $account,
             $validated['external_project_key'],
-            $validated['base_url'] ?? null,
             $user,
         );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __(':provider connected — the first sync is queued.', [
-            'provider' => $provider->label(),
+            'provider' => $account->provider->label(),
         ])]);
 
         return to_route('engagements.work.show', $engagement);
@@ -47,7 +49,7 @@ class IntegrationConnectionController extends Controller
 
     /**
      * Stop syncing. The connection and everything it imported stay — only
-     * the credentials are wiped.
+     * the link to the org account is dropped.
      */
     public function disconnect(Request $request, IntegrationConnection $connection): RedirectResponse
     {

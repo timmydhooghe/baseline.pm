@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { show as organization } from '@/routes/organization';
+import { index as integrations } from '@/routes/organization/integrations';
 import { show as rateCard } from '@/routes/organization/rate-card';
 import type { Organization, PlanUsage, SelectOption, UserRole } from '@/types';
 
@@ -49,7 +50,11 @@ type Props = {
     members: Member[];
     invitations: PendingInvitation[];
     assignableRoles: SelectOption[];
-    can: { manageMembers: boolean; viewRateCard: boolean };
+    can: {
+        manageMembers: boolean;
+        viewRateCard: boolean;
+        viewIntegrations: boolean;
+    };
 };
 
 const sectionLabel =
@@ -104,6 +109,19 @@ export default function OrganizationShow({
                             className="font-plex-mono text-[11px] font-semibold text-rust uppercase hover:underline"
                         >
                             Role rates &amp; versions →
+                        </Link>
+                    </div>
+                )}
+
+                {can.viewIntegrations && (
+                    <div className="flex flex-wrap items-baseline justify-between gap-2 border-[1.5px] border-ink px-4 py-3 dark:border-paper">
+                        <span className={sectionLabel}>Integrations</span>
+                        <Link
+                            href={integrations()}
+                            prefetch
+                            className="font-plex-mono text-[11px] font-semibold text-rust uppercase hover:underline"
+                        >
+                            Jira &amp; Linear accounts →
                         </Link>
                     </div>
                 )}

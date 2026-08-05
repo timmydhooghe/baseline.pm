@@ -11,6 +11,7 @@ import {
 import { show as workShow } from '@/routes/engagements/work';
 import type {
     EngagementStatus,
+    IntegrationAccountOption,
     IntegrationConnectionView,
     ReleaseView,
     SelectOption,
@@ -33,10 +34,11 @@ type Props = {
     mapping: WorkMappingSummary;
     deliverables: { id: string; title: string }[];
     baselineVersion: number | null;
-    providers: SelectOption[];
+    accounts: IntegrationAccountOption[];
     states: SelectOption[];
     can: {
         manageIntegrations: boolean;
+        manageAccounts: boolean;
         recordWork: boolean;
         linkWork: boolean;
     };
@@ -53,7 +55,7 @@ export default function EngagementsWork({
     mapping,
     deliverables,
     baselineVersion,
-    providers,
+    accounts,
     states,
     can,
 }: Props) {
@@ -136,7 +138,8 @@ export default function EngagementsWork({
                         {can.manageIntegrations && (
                             <WorkConnectDialog
                                 engagementId={engagement.id}
-                                providers={providers}
+                                accounts={accounts}
+                                canManageAccounts={can.manageAccounts}
                                 trigger={
                                     <Button
                                         variant="outline"
@@ -166,8 +169,9 @@ export default function EngagementsWork({
                                     key={connection.id}
                                     engagementId={engagement.id}
                                     connection={connection}
-                                    providers={providers}
+                                    accounts={accounts}
                                     canManage={can.manageIntegrations}
+                                    canManageAccounts={can.manageAccounts}
                                 />
                             ))}
                         </div>

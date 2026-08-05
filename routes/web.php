@@ -7,6 +7,7 @@ use App\Http\Controllers\BaselineDocumentController;
 use App\Http\Controllers\BaselineItemController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\EngagementController;
+use App\Http\Controllers\IntegrationAccountController;
 use App\Http\Controllers\IntegrationConnectionController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\MemberController;
@@ -65,6 +66,10 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('organization', [OrganizationController::class, 'show'])->name('organization.show');
     Route::get('organization/rate-card', [RateCardController::class, 'show'])->name('organization.rate-card.show');
     Route::post('organization/rate-card', [RateCardController::class, 'store'])->name('organization.rate-card.store');
+    Route::get('organization/integrations', [IntegrationAccountController::class, 'index'])->name('organization.integrations.index');
+    Route::post('organization/integrations', [IntegrationAccountController::class, 'store'])->name('organization.integrations.store');
+    Route::patch('organization/integrations/{account}', [IntegrationAccountController::class, 'update'])->name('organization.integrations.update');
+    Route::delete('organization/integrations/{account}', [IntegrationAccountController::class, 'destroy'])->name('organization.integrations.destroy');
     Route::patch('organization/members/{member}', [MemberController::class, 'update'])->name('organization.members.update');
     Route::delete('organization/members/{member}', [MemberController::class, 'destroy'])->name('organization.members.destroy');
     Route::post('organization/invitations', [InvitationController::class, 'store'])->name('organization.invitations.store');

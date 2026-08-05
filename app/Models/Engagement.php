@@ -5,7 +5,6 @@ namespace App\Models;
 use App\Enums\BaselineStatus;
 use App\Enums\EngagementStatus;
 use App\Enums\IntegrationConnectionStatus;
-use App\Enums\IntegrationProvider;
 use App\Enums\WorkItemSource;
 use App\Jobs\SyncIntegrationConnection;
 use App\Models\Concerns\BelongsToOrganization;
@@ -191,22 +190,21 @@ class Engagement extends Model
     }
 
     /**
-     * Connect an execution tool, or reconnect a previously disconnected one
-     * — the retained history resyncs instead of starting over (FA-7). The
-     * first sync is queued immediately.
-     *
-     * @param  array<string, string>  $credentials
+     * Connect an execution tool through one of the organization's accounts,
+     * or reconnect a previously disconnected one — the retained history
+     * resyncs instead of starting over (FA-7). The first sync is queued
+     * immediately.
      */
     public function connectIntegration(
-        IntegrationProvider $provider,
-        array $credentials,
+        IntegrationAccount $account,
         string $externalProjectKey,
-        ?string $baseUrl = null,
         ?User $actor = null,
     ): IntegrationConnection {
+        $provider = $account->provider;
+
         if ($this->status === EngagementStatus::Archived) {
             throw ValidationException::withMessages([
-                'provider' => __('Archived engagements are read-only.'),
+                'integration_account_id' => __('Archived engagements are read-only.'),
             ]);
         }
 
@@ -214,22 +212,20 @@ class Engagement extends Model
 
         if ($existing?->status === IntegrationConnectionStatus::Connected) {
             throw ValidationException::withMessages([
-                'provider' => __(':provider is already connected to this engagement.', ['provider' => $provider->label()]),
+                'integration_account_id' => __(':provider is already connected to this engagement.', ['provider' => $provider->label()]),
             ]);
         }
 
         if ($existing !== null) {
-            $existing->base_url = $baseUrl;
             $existing->external_project_key = $externalProjectKey;
-            $existing->reconnect($credentials, $actor);
+            $existing->reconnect($account, $actor);
 
             return $existing;
         }
 
         $connection = new IntegrationConnection([
             'provider' => $provider,
-            'credentials' => $credentials,
-            'base_url' => $baseUrl,
+            'integration_account_id' => $account->id,
             'external_project_key' => $externalProjectKey,
             'connected_by' => $actor?->id,
             'connected_at' => now(),

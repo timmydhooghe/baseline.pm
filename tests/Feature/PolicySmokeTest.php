@@ -4,6 +4,7 @@ use App\Enums\UserRole;
 use App\Models\AuditLog;
 use App\Models\Customer;
 use App\Models\Engagement;
+use App\Models\IntegrationAccount;
 use App\Models\IntegrationConnection;
 use App\Models\Invitation;
 use App\Models\Snapshot;
@@ -116,6 +117,18 @@ test('integrations are wired by managing roles and never deleted', function (Use
         ->and(Gate::forUser($user)->allows('disconnect', $connection))->toBe($allowed)
         ->and(Gate::forUser($user)->allows('sync', $connection))->toBe($allowed)
         ->and(Gate::forUser($user)->allows('delete', $connection))->toBeFalse();
+})->with($everyRole);
+
+test('integration accounts are visible to managing roles and managed by the owner only', function (UserRole $role, bool $sees) {
+    $user = User::factory()->role($role)->create();
+    $account = IntegrationAccount::factory()->for($user->organization)->create();
+    $ownerOnly = $role === UserRole::Owner;
+
+    expect(Gate::forUser($user)->allows('viewAny', IntegrationAccount::class))->toBe($sees)
+        ->and(Gate::forUser($user)->allows('view', $account))->toBe($sees)
+        ->and(Gate::forUser($user)->allows('create', IntegrationAccount::class))->toBe($ownerOnly)
+        ->and(Gate::forUser($user)->allows('update', $account))->toBe($ownerOnly)
+        ->and(Gate::forUser($user)->allows('delete', $account))->toBe($ownerOnly);
 })->with($everyRole);
 
 test('audit logs and snapshots can never be mutated, even by the owner', function () {

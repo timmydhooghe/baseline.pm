@@ -17,6 +17,13 @@ export type SyncRunView = {
     error: string | null;
 };
 
+export type IntegrationAccountOption = {
+    id: string;
+    provider: IntegrationProvider;
+    providerLabel: string;
+    name: string;
+};
+
 export type IntegrationConnectionView = {
     id: string;
     provider: IntegrationProvider;
@@ -24,7 +31,7 @@ export type IntegrationConnectionView = {
     status: IntegrationConnectionStatus;
     statusLabel: string;
     externalProjectKey: string;
-    baseUrl: string | null;
+    accountName: string | null;
     connectedByName: string | null;
     connectedAt: string | null;
     disconnectedAt: string | null;
