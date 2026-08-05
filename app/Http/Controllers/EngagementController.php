@@ -82,9 +82,13 @@ class EngagementController extends Controller
     {
         $validated = $request->validated();
 
-        $engagement = new Engagement(['name' => $validated['name']]);
-        $engagement->customer_id = $validated['customer_id'];
-        $engagement->save();
+        $user = $request->user();
+
+        if (! $user instanceof User) {
+            abort(403);
+        }
+
+        $engagement = $user->organization->startEngagement($validated['name'], $validated['customer_id']);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Engagement :name created as a draft.', [
             'name' => $engagement->name,
@@ -121,6 +125,7 @@ class EngagementController extends Controller
                 ]),
             'can' => [
                 'transition' => $request->user()?->can('transition', $engagement) ?? false,
+                'viewCustomer' => $request->user()?->can('view', $engagement->customer) ?? false,
             ],
         ]);
     }

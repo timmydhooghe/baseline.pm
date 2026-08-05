@@ -1,4 +1,4 @@
-import { Form } from '@inertiajs/react';
+import { Form, usePage } from '@inertiajs/react';
 import { useRef } from 'react';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import Heading from '@/components/heading';
@@ -18,6 +18,23 @@ import { Label } from '@/components/ui/label';
 
 export default function DeleteUser() {
     const passwordInput = useRef<HTMLInputElement>(null);
+    const { auth } = usePage().props;
+
+    if (auth.user.role === 'owner') {
+        return (
+            <div className="space-y-6">
+                <Heading
+                    variant="small"
+                    title="Delete account"
+                    description="Delete your account and all of its resources"
+                />
+                <p className="text-sm text-muted-foreground">
+                    As the organization owner you cannot delete your account —
+                    every organization must keep its owner.
+                </p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -84,6 +101,7 @@ export default function DeleteUser() {
                                         />
 
                                         <InputError message={errors.password} />
+                                        <InputError message={errors.account} />
                                     </div>
 
                                     <DialogFooter className="gap-2">

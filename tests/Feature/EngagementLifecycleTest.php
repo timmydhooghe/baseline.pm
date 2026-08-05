@@ -188,3 +188,17 @@ test('engagements of other organizations are hidden and not found', function () 
         ->get(route('engagements.show', $foreignEngagement))
         ->assertNotFound();
 });
+
+test('only managers may follow the customer link on an engagement', function () {
+    $manager = User::factory()->role(UserRole::DeliveryManager)->create();
+    $engagement = Engagement::factory()->for($manager->organization)->create();
+    $member = User::factory()->for($manager->organization)->role(UserRole::Member)->create();
+
+    $this->actingAs($manager)
+        ->get(route('engagements.show', $engagement))
+        ->assertInertia(fn (Assert $page) => $page->where('can.viewCustomer', true));
+
+    $this->actingAs($member)
+        ->get(route('engagements.show', $engagement))
+        ->assertInertia(fn (Assert $page) => $page->where('can.viewCustomer', false));
+});

@@ -8,6 +8,7 @@ use App\Models\Engagement;
 use App\Models\Organization;
 use App\Models\Stakeholder;
 use App\Models\User;
+use Illuminate\Validation\ValidationException;
 
 test('the solo plan allows a single active engagement', function () {
     $organization = Organization::factory()->create(['plan' => Plan::Solo]);
@@ -45,6 +46,23 @@ test('archived engagements free up their plan slot', function () {
 
     expect($organization->activeEngagementCount())->toBe(1)
         ->and($organization->engagements()->count())->toBe(2);
+});
+
+test('startEngagement rechecks the plan limit before inserting', function () {
+    $organization = Organization::factory()->create(['plan' => Plan::Solo]);
+    $customer = Customer::factory()->for($organization)->create();
+    Engagement::factory()->for($organization)->for($customer)->create();
+
+    $exception = null;
+
+    try {
+        $organization->startEngagement('One too many', $customer->id);
+    } catch (ValidationException $caught) {
+        $exception = $caught;
+    }
+
+    expect($exception?->errors())->toHaveKey('plan')
+        ->and($organization->engagements()->count())->toBe(1);
 });
 
 test('drafts and completed engagements occupy a plan slot', function () {

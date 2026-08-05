@@ -52,10 +52,7 @@ class StoreEngagementRequest extends FormRequest
                     return;
                 }
 
-                $validator->errors()->add('plan', __('The :plan plan is limited to :limit active engagements. Archive an engagement or upgrade your plan to start a new one.', [
-                    'plan' => $organization->plan->label(),
-                    'limit' => (string) $organization->plan->activeEngagementLimit(),
-                ]));
+                $validator->errors()->add('plan', $organization->activeEngagementLimitMessage());
             },
         ];
     }

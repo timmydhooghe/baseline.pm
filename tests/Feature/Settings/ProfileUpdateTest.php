@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\UserRole;
 use App\Models\User;
 
 test('profile page is displayed', function () {
@@ -65,6 +66,24 @@ test('user can delete their account', function () {
 
     $this->assertGuest();
     expect($user->fresh())->toBeNull();
+});
+
+test('the organization owner cannot delete their account', function () {
+    $owner = User::factory()->role(UserRole::Owner)->create();
+
+    $response = $this
+        ->actingAs($owner)
+        ->from(route('profile.edit'))
+        ->delete(route('profile.destroy'), [
+            'password' => 'password',
+        ]);
+
+    $response
+        ->assertSessionHasErrors('account')
+        ->assertRedirect(route('profile.edit'));
+
+    $this->assertAuthenticated();
+    expect($owner->fresh())->not->toBeNull();
 });
 
 test('correct password must be provided to delete account', function () {

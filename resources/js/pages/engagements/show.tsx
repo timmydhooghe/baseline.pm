@@ -33,7 +33,7 @@ type EngagementDetail = {
 type Props = {
     engagement: EngagementDetail;
     lifecycle: SelectOption[];
-    can: { transition: boolean };
+    can: { transition: boolean; viewCustomer: boolean };
 };
 
 export default function EngagementsShow({ engagement, lifecycle, can }: Props) {
@@ -72,13 +72,19 @@ export default function EngagementsShow({ engagement, lifecycle, can }: Props) {
                         </h1>
                         <p className="mt-1 text-[14px] text-stone dark:text-fog">
                             for{' '}
-                            <Link
-                                href={customerShow(engagement.customer.id)}
-                                prefetch
-                                className="font-medium text-ink hover:text-rust dark:text-paper dark:hover:text-rust"
-                            >
-                                {engagement.customer.name}
-                            </Link>
+                            {can.viewCustomer ? (
+                                <Link
+                                    href={customerShow(engagement.customer.id)}
+                                    prefetch
+                                    className="font-medium text-ink hover:text-rust dark:text-paper dark:hover:text-rust"
+                                >
+                                    {engagement.customer.name}
+                                </Link>
+                            ) : (
+                                <span className="font-medium text-ink dark:text-paper">
+                                    {engagement.customer.name}
+                                </span>
+                            )}
                             {engagement.createdAt !== null &&
                                 ` · started ${engagement.createdAt}`}
                         </p>

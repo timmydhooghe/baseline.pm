@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * The tenant root. All tenant data hangs off an organization via organization_id.
@@ -136,6 +137,45 @@ class Organization extends Model
 
             return $version;
         });
+    }
+
+    /**
+     * Start a draft engagement, rechecking the plan limit under a lock so
+     * concurrent requests cannot both claim the last plan slot.
+     */
+    public function startEngagement(string $name, string $customerId): Engagement
+    {
+        return DB::transaction(function () use ($name, $customerId): Engagement {
+            /*
+             * PostgreSQL refuses FOR UPDATE on aggregate queries, so the
+             * count is serialized by locking the organization row instead.
+             */
+            self::query()->whereKey($this->id)->lockForUpdate()->first();
+
+            if ($this->hasReachedActiveEngagementLimit()) {
+                throw ValidationException::withMessages([
+                    'plan' => $this->activeEngagementLimitMessage(),
+                ]);
+            }
+
+            $engagement = new Engagement(['name' => $name]);
+            $engagement->organization_id = $this->id;
+            $engagement->customer_id = $customerId;
+            $engagement->save();
+
+            return $engagement;
+        });
+    }
+
+    /**
+     * The error shown when the plan's active-engagement limit is reached.
+     */
+    public function activeEngagementLimitMessage(): string
+    {
+        return __('The :plan plan is limited to :limit active engagements. Archive an engagement or upgrade your plan to start a new one.', [
+            'plan' => $this->plan->label(),
+            'limit' => (string) $this->plan->activeEngagementLimit(),
+        ]);
     }
 
     /**
