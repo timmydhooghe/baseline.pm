@@ -284,7 +284,7 @@ export default function Welcome() {
             <div className="min-h-screen min-w-[1100px] bg-paper font-onest text-ink selection:bg-sun">
                 <header className="sticky top-0 z-10 flex items-center gap-[26px] border-b-2 border-ink bg-paper px-14 py-5">
                     <div className="font-display text-[18px] font-bold tracking-[-.01em]">
-                        BASELINE
+                        BASELINE<span className="text-rust">.</span>
                     </div>
                     {navLinks.map((link) => (
                         <a
@@ -1114,7 +1114,7 @@ export default function Welcome() {
                 <footer className="flex items-start gap-10 border-t-2 border-ink bg-paper px-14 py-9 text-[12px] text-stone">
                     <div>
                         <div className="font-display text-[15px] font-bold text-ink">
-                            BASELINE
+                            BASELINE<span className="text-rust">.</span>
                         </div>
                         <div className="mt-1.5 max-w-[220px] leading-[1.5]">
                             Delivery governance for agencies running fixed-price
