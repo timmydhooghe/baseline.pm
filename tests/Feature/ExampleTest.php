@@ -19,3 +19,21 @@ test('public wordmarks use the brand accent', function () {
     expect(Str::substrCount($landingPage, $accentedWordmark))->toBe(2)
         ->and(Str::substrCount($authLayout, $accentedWordmark))->toBe(1);
 });
+
+test('the landing page only presents supported banner claims', function () {
+    $landingPage = File::get(resource_path('js/pages/welcome.tsx'));
+
+    expect($landingPage)
+        ->toContain(
+            'MORE PROFIT',
+            'FASTER APPROVALS',
+            'LESS DISCUSSIONS',
+            'font-display text-[16px] font-bold',
+            'size-2.5 shrink-0 rounded-full bg-moss',
+        )
+        ->not->toContain(
+            'const heroStats',
+            'RUNNING ON BASELINE',
+            '120+ DELIVERY TEAMS',
+        );
+});

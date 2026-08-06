@@ -192,19 +192,10 @@ const navLinks = [
     { href: '#manifesto', label: 'MANIFESTO' },
 ];
 
-const customers = [
-    'NORTHBOUND',
-    'HELIX DIGITAL',
-    'STUDIO K',
-    'PORTA',
-    'FIELDWORK',
-    'MOLENAAR&CO',
-];
-
-const heroStats = [
-    { value: '6.2pts', label: 'margin recovered avg.' },
-    { value: '11 days', label: 'faster CR sign-off' },
-    { value: '0', label: 'invoice disputes' },
+const bannerStatements = [
+    'MORE PROFIT',
+    'FASTER APPROVALS',
+    'LESS DISCUSSIONS',
 ];
 
 const problems = [
@@ -363,17 +354,6 @@ export default function Welcome() {
                                 2-MIN TOUR
                             </button>
                         </div>
-                        <div className="mt-9 flex animate-rise-in gap-8.5 font-plex-mono text-[11.5px] text-stone [animation-delay:.28s]">
-                            {heroStats.map((stat) => (
-                                <span key={stat.label}>
-                                    <b className="text-[19px] text-ink">
-                                        {stat.value}
-                                    </b>
-                                    <br />
-                                    {stat.label}
-                                </span>
-                            ))}
-                        </div>
                     </div>
                     <PositionCard />
                 </section>
@@ -385,21 +365,19 @@ export default function Welcome() {
                     />
                 )}
 
-                <div className="flex items-center gap-10 overflow-hidden border-t-2 border-ink bg-ink px-14 py-3.5 text-[11.5px] text-paper">
-                    <span className="flex-none font-bold text-ash">
-                        RUNNING ON BASELINE
-                    </span>
-                    {customers.map((customer) => (
+                <div className="grid grid-cols-3 overflow-hidden border-t-2 border-ink bg-ink px-14 py-4.5 text-paper">
+                    {bannerStatements.map((statement) => (
                         <span
-                            key={customer}
-                            className="font-display font-bold opacity-70 transition-opacity duration-200 hover:opacity-100"
+                            key={statement}
+                            className="flex items-center justify-center gap-3 border-l border-soot font-display text-[16px] font-bold tracking-[-.01em] first:border-l-0"
                         >
-                            {customer}
+                            <span
+                                aria-hidden="true"
+                                className="size-2.5 shrink-0 rounded-full bg-moss"
+                            />
+                            <span>{statement}</span>
                         </span>
                     ))}
-                    <span className="ml-auto flex-none font-plex-mono text-ash">
-                        120+ DELIVERY TEAMS
-                    </span>
                 </div>
 
                 <section
