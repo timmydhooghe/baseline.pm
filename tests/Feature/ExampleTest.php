@@ -37,3 +37,36 @@ test('the landing page only presents supported banner claims', function () {
             '120+ DELIVERY TEAMS',
         );
 });
+
+test('the landing page uses mobile-first responsive layouts', function () {
+    $landingPage = File::get(resource_path('js/pages/welcome.tsx'));
+
+    expect($landingPage)
+        ->not->toContain('min-w-[1100px]')
+        ->toContain(
+            'overflow-x-hidden',
+            'text-[44px] leading-none font-bold tracking-[-.03em] sm:text-[56px] lg:text-[64px]',
+            'grid-cols-1 border-t-2 border-ink sm:mt-9 md:grid-cols-3',
+            'grid-cols-1 gap-3 sm:mt-9 md:grid-cols-2 lg:grid-cols-4',
+            'flex flex-col border-2 border-ink bg-white lg:flex-row',
+        );
+});
+
+test('the landing page uses the margin protection call to action', function () {
+    $landingPage = File::get(resource_path('js/pages/welcome.tsx'));
+
+    expect(Str::substrCount($landingPage, 'PROTECT YOUR MARGIN →'))->toBe(2)
+        ->and($landingPage)->not->toContain('SEE YOUR POSITION →');
+});
+
+test('the landing page introduction avoids unsupported performance claims', function () {
+    $landingPage = File::get(resource_path('js/pages/welcome.tsx'));
+
+    expect($landingPage)
+        ->toContain(
+            'Your delivery tools track the work. Baseline tracks',
+            'the agreement: scope, changes, approvals, delays,',
+            'and every commercial decision between them.',
+        )
+        ->not->toContain('Agencies lose 4–9 margin points');
+});
