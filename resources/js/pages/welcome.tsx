@@ -109,10 +109,10 @@ function TourModal({
             >
                 <div className="flex items-center gap-2.5 border-b-2 border-ink bg-paper px-3 py-2.5 sm:px-4 sm:py-3">
                     <span className="font-plex-mono text-[11.5px] font-semibold text-ink">
-                        BASELINE — 2-MIN TOUR
+                        BASELINE · 2-MIN TOUR
                     </span>
                     <span className="hidden font-plex-mono text-[10.5px] text-stone sm:inline">
-                        placeholder footage — final cut in production
+                        placeholder footage · final cut in production
                     </span>
                     <button
                         type="button"
@@ -140,7 +140,7 @@ function PositionCard() {
         <div className="w-full max-w-[380px] flex-none animate-rise-in border-2 border-ink bg-white px-5 py-5 shadow-[6px_6px_0_var(--color-ink)] [animation-delay:.25s] [animation-duration:.7s] sm:px-6.5 sm:py-6 sm:shadow-[8px_8px_0_var(--color-ink)] lg:w-[340px]">
             <div className="flex items-baseline">
                 <div className="text-[11px] font-bold tracking-[.08em] text-stone">
-                    THE POSITION — LIVE
+                    THE POSITION · LIVE
                 </div>
                 <div className="ml-auto font-plex-mono text-[10px] text-moss">
                     <span className="animate-pulse-dot">●</span> SYNCED 4 MIN
@@ -203,7 +203,7 @@ const problems = [
         stat: '€9,200 gone',
         statColor: 'text-rust',
         title: 'Scope creep is invisible until invoice time',
-        body: '"Small favours" land in the sprint without a contract line. Nobody decided to do them for free — nobody decided at all.',
+        body: '"Small favours" land in the sprint without a contract line. Nobody decided to do them for free. Nobody decided at all.',
         cellClass:
             'border-b border-sand-400 py-6 md:border-r md:border-b-0 md:pr-7.5',
         delay: 0,
@@ -212,7 +212,7 @@ const problems = [
         stat: '4 days, no answer',
         statColor: 'text-ochre',
         title: 'Change requests die in email threads',
-        body: 'The approval sits unanswered — but the work starts anyway. When the invoice lands, the client remembers a conversation, not an agreement.',
+        body: 'The approval sits unanswered, but the work starts anyway. When the invoice lands, the client remembers a conversation, not an agreement.',
         cellClass:
             'border-b border-sand-400 py-6 md:border-r md:border-b-0 md:px-7.5',
         delay: 0.08,
@@ -221,7 +221,7 @@ const problems = [
         stat: '11 days late',
         statColor: 'text-rust',
         title: 'Client delays become your penalty',
-        body: 'Their late test data, your late milestone. Without day-by-day attribution, you eat the slip — or fight about it.',
+        body: 'Their late test data, your late milestone. Without day-by-day attribution, you absorb the slip or fight about it.',
         cellClass: 'py-6 md:pl-7.5',
         delay: 0.16,
     },
@@ -271,7 +271,7 @@ export default function Welcome() {
                 />
                 <meta
                     name="description"
-                    content="Baseline shows agencies their commercial position on fixed-price work every morning — scope creep priced, change requests signed, delays attributed."
+                    content="Baseline shows agencies their commercial position on fixed-price work every morning: scope creep priced, change requests signed, delays attributed."
                 />
             </Head>
             <div className="min-h-screen overflow-x-hidden bg-paper font-onest text-ink selection:bg-sun">
@@ -389,7 +389,7 @@ export default function Welcome() {
                     className="mx-auto max-w-[1200px] px-4 pt-14 pb-6 sm:px-6 sm:pt-16 lg:px-14 lg:pt-19 lg:pb-7.5"
                 >
                     <div className={cn(kicker, 'text-rust')}>
-                        01 — THE PROBLEM
+                        01 · THE PROBLEM
                     </div>
                     <Reveal
                         className={cn(
@@ -432,7 +432,7 @@ export default function Welcome() {
                     className="mx-auto max-w-[1200px] px-4 py-12 sm:px-6 sm:py-14 lg:px-14 lg:py-15"
                 >
                     <div className={cn(kicker, 'text-moss')}>
-                        02 — THE MOVES
+                        02 · THE MOVES
                     </div>
                     <Reveal className={cn(sectionTitle, 'leading-[1.1]')}>
                         Three moves, every morning.
@@ -455,8 +455,8 @@ export default function Welcome() {
                                     <div className="mt-2.5 max-w-[400px] text-[13.5px] leading-[1.65] text-pretty text-stone">
                                         Every Jira and Linear issue is matched
                                         against your approved scope. Anything
-                                        unlinked shows up priced in euros — not
-                                        story points — with four ways out:
+                                        unlinked shows up priced in euros, not
+                                        story points, with four ways out:
                                         in-scope, change request, operational,
                                         dismiss. Each classification is on the
                                         record.
@@ -548,13 +548,12 @@ export default function Welcome() {
                                         Change orders carry price, timeline
                                         impact, trade-off alternatives and a
                                         response deadline. Your client approves
-                                        in their own portal — one click,
-                                        identity verified, immutable. Approval
-                                        creates a new baseline version
-                                        automatically.
+                                        in their own portal: one click, identity
+                                        verified, immutable. Approval creates a
+                                        new baseline version automatically.
                                     </div>
                                     <div className="mt-3 font-plex-mono text-[11px] text-stone">
-                                        NO WORK BEFORE APPROVAL — BREACHES GET
+                                        NO WORK BEFORE APPROVAL · BREACHES GET
                                         FLAGGED
                                     </div>
                                 </div>
@@ -578,7 +577,7 @@ export default function Welcome() {
                                         Client-owed dependencies have dates and
                                         owners. When one slips, the milestone
                                         impact is computed day-for-day and the
-                                        attribution is recorded — acknowledged
+                                        attribution is recorded and acknowledged
                                         by the client at the time, not argued
                                         about at the end.
                                     </div>
@@ -620,7 +619,7 @@ export default function Welcome() {
                 <section className="bg-ink px-4 py-14 text-paper sm:px-6 sm:py-16 lg:px-14">
                     <div className="mx-auto max-w-[1200px]">
                         <div className={cn(kicker, 'text-sun')}>
-                            03 — THE OTHER SIDE
+                            03 · THE OTHER SIDE
                         </div>
                         <div className="mt-2.5 flex flex-col items-stretch gap-10 lg:flex-row lg:items-center lg:gap-14">
                             <Reveal className="flex-1">
@@ -634,7 +633,7 @@ export default function Welcome() {
                                 <div className="mt-4 max-w-[440px] text-[14.5px] leading-[1.65] text-pretty text-fog">
                                     The client portal shows commitments,
                                     milestones, decisions and their own overdue
-                                    actions — never your margin. When both sides
+                                    actions, never your margin. When both sides
                                     watch the same ledger all along, the final
                                     invoice is a formality, not a fight.
                                 </div>
@@ -668,11 +667,11 @@ export default function Welcome() {
                                     </b>
                                     <div className="mt-1.5 grid gap-1">
                                         <span>
-                                            1. Provide carrier test data —{' '}
+                                            1. Provide carrier test data ·{' '}
                                             <b>11 days overdue</b>
                                         </span>
                                         <span>
-                                            2. Decide CR-07 (€18,400) — by
+                                            2. Decide CR-07 (€18,400) · by
                                             Wednesday
                                         </span>
                                     </div>
@@ -691,7 +690,7 @@ export default function Welcome() {
                     className="mx-auto max-w-[1200px] px-4 pt-14 pb-6 sm:px-6 sm:pt-16 lg:px-14 lg:pt-19 lg:pb-7.5"
                 >
                     <div className={cn(kicker, 'text-rust')}>
-                        04 — THE RECORD
+                        04 · THE RECORD
                     </div>
                     <Reveal className={cn(sectionTitle, 'leading-[1.1]')}>
                         Everything on the record.
@@ -715,7 +714,7 @@ export default function Welcome() {
                                 </div>
                                 <div className="mt-2 text-[13px] leading-[1.6] text-pretty text-stone">
                                     Scope is versioned like code. Nothing edited
-                                    in place, nothing lost — every euro traces
+                                    in place, nothing lost. Every euro traces
                                     back to the version that authorised it.
                                 </div>
                                 <div className="mt-4 flex flex-wrap items-center gap-2 font-plex-mono text-[11px]">
@@ -870,7 +869,7 @@ export default function Welcome() {
                                 <div className="mt-2 text-[13px] leading-[1.6] text-pretty text-fog">
                                     One page: what moved, what changed, what's
                                     owed and by whom. Every line links to the
-                                    record behind it — no narrative, no spin.
+                                    record behind it. No narrative, no spin.
                                 </div>
                                 <div className="mt-3 font-plex-mono text-[10.5px] text-ash">
                                     WK 32 REPORT · 14 LINKED RECORDS · SENT TO 6
@@ -919,7 +918,7 @@ export default function Welcome() {
                                     Meets the work where it lives
                                 </div>
                                 <div className="mt-2 text-[13px] leading-[1.6] text-pretty text-stone">
-                                    Two-way sync with the delivery tool — no
+                                    Two-way sync with the delivery tool. No
                                     double entry, no new board to maintain.
                                 </div>
                                 <div className="mt-3.5 flex flex-wrap gap-2 font-plex-mono text-[10.5px] font-semibold">
@@ -942,7 +941,7 @@ export default function Welcome() {
                     id="pricing"
                     className="mx-auto max-w-[1200px] px-4 py-14 sm:px-6 sm:py-16 lg:px-14 lg:py-19"
                 >
-                    <div className={cn(kicker, 'text-moss')}>05 — PRICING</div>
+                    <div className={cn(kicker, 'text-moss')}>05 · PRICING</div>
                     <Reveal className={sectionTitle}>
                         One recovered change request pays for the year.
                     </Reveal>
@@ -1035,7 +1034,7 @@ export default function Welcome() {
                         </div>
                     </Reveal>
                     <div className="mt-3 font-plex-mono text-[11.5px] text-stone">
-                        CLIENT USERS ARE ALWAYS FREE — APPROVERS, VIEWERS,
+                        CLIENT USERS ARE ALWAYS FREE: APPROVERS, VIEWERS,
                         SPONSORS. NO SEAT MATH.
                     </div>
                 </section>
@@ -1046,7 +1045,7 @@ export default function Welcome() {
                 >
                     <Reveal className="mx-auto max-w-[760px]">
                         <div className={cn(kicker, 'text-rust')}>
-                            06 — MANIFESTO
+                            06 · MANIFESTO
                         </div>
                         <div className="mt-3.5 font-display text-[26px] leading-[1.25] font-bold tracking-[-.02em] sm:text-[30px]">
                             Scope creep isn't a client problem.
@@ -1063,14 +1062,14 @@ export default function Welcome() {
                             work lives in a tool the contract has never heard
                             of. Every undocumented favour, every "quick
                             addition", every slipped dependency is a small
-                            silent renegotiation — always in the same direction.
+                            silent renegotiation, always in the same direction.
                         </div>
                         <div className="mt-3.5 text-[15px] leading-[1.75] text-pretty text-soot">
                             Baseline's bet: if keeping the record is effortless,
-                            the record keeps you. Decide who pays for every hour
-                            — deliberately, visibly, at the moment it happens —
-                            and fixed price becomes what it was supposed to be:
-                            a fair deal for both sides.
+                            the record keeps you. Decide who pays for every
+                            hour, deliberately and visibly, at the moment it
+                            happens. Then fixed price becomes what it was
+                            supposed to be: a fair deal for both sides.
                         </div>
                         <div className="mt-7.5 flex flex-col gap-3 sm:flex-row">
                             <Link

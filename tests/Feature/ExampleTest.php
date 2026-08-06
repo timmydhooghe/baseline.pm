@@ -70,3 +70,9 @@ test('the landing page introduction avoids unsupported performance claims', func
         )
         ->not->toContain('Agencies lose 4–9 margin points');
 });
+
+test('the landing page contains no em dashes', function () {
+    $landingPage = File::get(resource_path('js/pages/welcome.tsx'));
+
+    expect($landingPage)->not->toContain('—');
+});
