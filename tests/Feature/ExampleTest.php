@@ -22,19 +22,30 @@ test('public wordmarks use the brand accent', function () {
 
 test('the landing page only presents supported banner claims', function () {
     $landingPage = File::get(resource_path('js/pages/welcome.tsx'));
+    $orderedBannerStatements = <<<'TS'
+const bannerStatements = [
+    'MORE PROFIT',
+    'SCOPE UNDER CONTROL',
+    'FASTER APPROVALS',
+    'FEWER DISPUTES',
+];
+TS;
 
     expect($landingPage)
         ->toContain(
-            'MORE PROFIT',
-            'FASTER APPROVALS',
-            'LESS DISCUSSIONS',
-            'font-display text-[16px] font-bold',
+            $orderedBannerStatements,
+            'font-display text-[18px] font-bold',
+            'lg:text-[20px]',
+            'md:grid-cols-2',
+            'lg:grid-cols-4',
             'size-2.5 shrink-0 rounded-full bg-moss',
         )
         ->not->toContain(
             'const heroStats',
             'RUNNING ON BASELINE',
             '120+ DELIVERY TEAMS',
+            'NO SCOPE CREEP',
+            'LESS DISCUSSIONS',
         );
 });
 

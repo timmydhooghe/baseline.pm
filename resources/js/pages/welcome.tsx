@@ -194,8 +194,9 @@ const navLinks = [
 
 const bannerStatements = [
     'MORE PROFIT',
+    'CONTROLLED SCOPE',
     'FASTER APPROVALS',
-    'LESS DISCUSSIONS',
+    'FEWER DISPUTES',
 ];
 
 const problems = [
@@ -369,11 +370,11 @@ export default function Welcome() {
                     />
                 )}
 
-                <div className="grid grid-cols-1 overflow-hidden border-t-2 border-ink bg-ink px-4 text-paper sm:grid-cols-3 sm:px-6 sm:py-4.5 lg:px-14">
+                <div className="grid grid-cols-1 overflow-hidden border-t-2 border-ink bg-ink px-4 text-paper sm:px-6 md:grid-cols-2 md:py-3 lg:grid-cols-4 lg:px-14 lg:py-5">
                     {bannerStatements.map((statement) => (
                         <span
                             key={statement}
-                            className="flex items-center justify-center gap-3 border-t border-soot py-3 font-display text-[16px] font-bold tracking-[-.01em] first:border-t-0 sm:border-t-0 sm:border-l sm:py-0 sm:first:border-l-0"
+                            className="flex items-center justify-center gap-3 border-t border-soot py-4 font-display text-[18px] font-bold tracking-[-.01em] first:border-t-0 md:border-l md:py-3 md:first:border-l-0 md:nth-2:border-t-0 md:nth-3:border-l-0 lg:border-t-0 lg:py-0 lg:text-[20px] lg:nth-3:border-l"
                         >
                             <span
                                 aria-hidden="true"
