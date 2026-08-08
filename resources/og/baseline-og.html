@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>Baseline social card</title>
+        <!--
+        Source for public/og/baseline-og.png (1200x630).
+
+        The __FONT_*__ placeholders are replaced with the current content hashed
+        paths from public/build/assets by render.sh, which then screenshots this
+        file with headless Chrome. Run `resources/og/render.sh` to regenerate.
+    -->
+        <style>
+            @font-face {
+                font-family: 'Space Grotesk';
+                src: url('__FONT_SPACE_GROTESK_700__') format('woff2');
+                font-weight: 700;
+            }
+
+            @font-face {
+                font-family: 'Onest';
+                src: url('__FONT_ONEST_500__') format('woff2');
+                font-weight: 500;
+            }
+
+            @font-face {
+                font-family: 'IBM Plex Mono';
+                src: url('__FONT_PLEX_MONO_600__') format('woff2');
+                font-weight: 600;
+            }
+
+            :root {
+                --paper: #f3f1ec;
+                --ink: #141414;
+                --stone: #6f6a60;
+                --rust: #b3372b;
+                --sun: #ffd84d;
+                --moss: #2f6b4f;
+            }
+
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                width: 1200px;
+                height: 630px;
+                background: var(--paper);
+                color: var(--ink);
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                -webkit-font-smoothing: antialiased;
+            }
+
+            .top {
+                flex: 1;
+                padding: 66px 72px 0;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .masthead {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            }
+
+            .wordmark {
+                font-family: 'Space Grotesk', sans-serif;
+                font-weight: 700;
+                font-size: 30px;
+                letter-spacing: -0.01em;
+            }
+
+            .wordmark span {
+                color: var(--rust);
+            }
+
+            .swatches {
+                display: flex;
+                gap: 8px;
+            }
+
+            .swatches i {
+                width: 30px;
+                height: 30px;
+                border: 2px solid var(--ink);
+            }
+
+            .statement {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                padding-bottom: 24px;
+            }
+
+            h1 {
+                font-family: 'Space Grotesk', sans-serif;
+                font-weight: 700;
+                font-size: 96px;
+                line-height: 0.98;
+                letter-spacing: -0.035em;
+            }
+
+            h1 mark {
+                background: var(--sun);
+                color: var(--ink);
+                padding: 0 12px;
+                box-decoration-break: clone;
+            }
+
+            p {
+                margin-top: 40px;
+                max-width: 1000px;
+                font-family: 'Onest', sans-serif;
+                font-weight: 500;
+                font-size: 27px;
+                line-height: 1.4;
+                color: var(--stone);
+            }
+
+            .bar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 0 72px;
+                height: 92px;
+                background: var(--ink);
+                color: var(--paper);
+                font-family: 'IBM Plex Mono', monospace;
+                font-weight: 600;
+                font-size: 19px;
+                letter-spacing: 0.06em;
+            }
+
+            .bar .muted {
+                color: #b5b0a6;
+                font-size: 17px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="top">
+            <div class="masthead">
+                <div class="wordmark">BASELINE<span>.</span></div>
+                <div class="swatches">
+                    <i style="background: var(--rust)"></i>
+                    <i style="background: var(--sun)"></i>
+                    <i style="background: var(--moss)"></i>
+                </div>
+            </div>
+
+            <div class="statement">
+                <h1>Fixed price.<br />Not fixed <mark>losses</mark>.</h1>
+
+                <p>
+                    Scope creep priced. Change requests signed. Delays
+                    attributed.
+                </p>
+            </div>
+        </div>
+
+        <div class="bar">
+            <div>BASELINE.PM</div>
+            <div class="muted">DELIVERY GOVERNANCE FOR FIXED-PRICE WORK</div>
+        </div>
+    </body>
+</html>

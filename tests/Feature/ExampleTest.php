@@ -25,7 +25,7 @@ test('the landing page only presents supported banner claims', function () {
     $orderedBannerStatements = <<<'TS'
 const bannerStatements = [
     'MORE PROFIT',
-    'SCOPE UNDER CONTROL',
+    'CONTROLLED SCOPE',
     'FASTER APPROVALS',
     'FEWER DISPUTES',
 ];

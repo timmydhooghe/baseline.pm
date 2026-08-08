@@ -264,17 +264,8 @@ export default function Welcome() {
 
     return (
         <>
-            <Head title="Fixed price. Not fixed losses.">
-                <link rel="preconnect" href="https://fonts.bunny.net" />
-                <link
-                    rel="stylesheet"
-                    href="https://fonts.bunny.net/css?family=ibm-plex-mono:400,500,600|onest:400,600,700|space-grotesk:700&display=swap"
-                />
-                <meta
-                    name="description"
-                    content="Baseline shows agencies their commercial position on fixed-price work every morning: scope creep priced, change requests signed, delays attributed."
-                />
-            </Head>
+            {/* Description, Open Graph and schema.org are server rendered from config/seo.php: crawlers never run the head manager. */}
+            <Head title="Fixed price. Not fixed losses." />
             <div className="min-h-screen overflow-x-hidden bg-paper font-onest text-ink selection:bg-sun">
                 <header className="sticky top-0 z-10 flex items-center gap-3 border-b-2 border-ink bg-paper px-4 py-3.5 sm:px-6 sm:py-4 lg:gap-[26px] lg:px-14 lg:py-5">
                     <div className="flex-none font-display text-[18px] font-bold tracking-[-.01em]">
