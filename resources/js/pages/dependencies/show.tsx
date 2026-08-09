@@ -4,10 +4,18 @@ import DependencyController from '@/actions/App/Http/Controllers/DependencyContr
 import DependencyEventController from '@/actions/App/Http/Controllers/DependencyEventController';
 import InputError from '@/components/input-error';
 import LinkedRecordsField from '@/components/linked-records-field';
+import { selectTriggerClass } from '@/components/optional-select';
 import RecordChipList from '@/components/record-chip-list';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { show as dependencyShow } from '@/routes/dependencies';
 import {
@@ -40,9 +48,6 @@ const sectionLabel =
 
 const fieldClass =
     'rounded-none border-[1.5px] border-ink shadow-none dark:border-paper';
-
-const selectClass =
-    'h-10 w-full rounded-none border-[1.5px] border-ink bg-transparent px-3 text-[14px] shadow-none outline-none dark:border-paper';
 
 function Panel({
     title,
@@ -94,6 +99,7 @@ export default function DependenciesShow({
     const [party, setParty] = useState<'customer' | 'internal'>(
         dependency.party,
     );
+    const [eventType, setEventType] = useState('reminded');
 
     return (
         <>
@@ -241,63 +247,77 @@ export default function DependenciesShow({
                                             <Label htmlFor="party">
                                                 Owed by
                                             </Label>
-                                            <select
-                                                id="party"
+                                            <Select
                                                 name="party"
                                                 value={party}
-                                                onChange={(event) =>
+                                                onValueChange={(next) =>
                                                     setParty(
-                                                        event.target.value ===
-                                                            'internal'
+                                                        next === 'internal'
                                                             ? 'internal'
                                                             : 'customer',
                                                     )
                                                 }
-                                                className={selectClass}
-                                                data-test="edit-party"
                                             >
-                                                <option value="customer">
-                                                    Customer
-                                                </option>
-                                                <option value="internal">
-                                                    Internal
-                                                </option>
-                                            </select>
+                                                <SelectTrigger
+                                                    id="party"
+                                                    data-test="edit-party"
+                                                    className={
+                                                        selectTriggerClass
+                                                    }
+                                                >
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="customer">
+                                                        Customer
+                                                    </SelectItem>
+                                                    <SelectItem value="internal">
+                                                        Internal
+                                                    </SelectItem>
+                                                </SelectContent>
+                                            </Select>
                                         </div>
                                         {party === 'customer' ? (
                                             <div className="grid gap-2">
                                                 <Label htmlFor="responsible_stakeholder_id">
                                                     Responsible contact
                                                 </Label>
-                                                <select
-                                                    id="responsible_stakeholder_id"
+                                                <Select
                                                     name="responsible_stakeholder_id"
                                                     defaultValue={
                                                         dependency.responsibleStakeholderId ??
-                                                        ''
+                                                        undefined
                                                     }
-                                                    className={selectClass}
-                                                    data-test="edit-stakeholder"
                                                 >
-                                                    <option value="">
-                                                        Choose a contact
-                                                    </option>
-                                                    {(
-                                                        options.stakeholders ??
-                                                        []
-                                                    ).map((stakeholder) => (
-                                                        <option
-                                                            key={
-                                                                stakeholder.value
-                                                            }
-                                                            value={
-                                                                stakeholder.value
-                                                            }
-                                                        >
-                                                            {stakeholder.label}
-                                                        </option>
-                                                    ))}
-                                                </select>
+                                                    <SelectTrigger
+                                                        id="responsible_stakeholder_id"
+                                                        data-test="edit-stakeholder"
+                                                        className={
+                                                            selectTriggerClass
+                                                        }
+                                                    >
+                                                        <SelectValue placeholder="Choose a contact" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {(
+                                                            options.stakeholders ??
+                                                            []
+                                                        ).map((stakeholder) => (
+                                                            <SelectItem
+                                                                key={
+                                                                    stakeholder.value
+                                                                }
+                                                                value={
+                                                                    stakeholder.value
+                                                                }
+                                                            >
+                                                                {
+                                                                    stakeholder.label
+                                                                }
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
                                                 <InputError
                                                     message={
                                                         errors.responsible_stakeholder_id
@@ -309,34 +329,41 @@ export default function DependenciesShow({
                                                 <Label htmlFor="responsible_user_id">
                                                     Responsible colleague
                                                 </Label>
-                                                <select
-                                                    id="responsible_user_id"
+                                                <Select
                                                     name="responsible_user_id"
                                                     defaultValue={
                                                         dependency.responsibleUserId ??
-                                                        ''
+                                                        undefined
                                                     }
-                                                    className={selectClass}
-                                                    data-test="edit-user"
                                                 >
-                                                    <option value="">
-                                                        Choose a colleague
-                                                    </option>
-                                                    {options.members.map(
-                                                        (member) => (
-                                                            <option
-                                                                key={
-                                                                    member.value
-                                                                }
-                                                                value={
-                                                                    member.value
-                                                                }
-                                                            >
-                                                                {member.label}
-                                                            </option>
-                                                        ),
-                                                    )}
-                                                </select>
+                                                    <SelectTrigger
+                                                        id="responsible_user_id"
+                                                        data-test="edit-user"
+                                                        className={
+                                                            selectTriggerClass
+                                                        }
+                                                    >
+                                                        <SelectValue placeholder="Choose a colleague" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {options.members.map(
+                                                            (member) => (
+                                                                <SelectItem
+                                                                    key={
+                                                                        member.value
+                                                                    }
+                                                                    value={
+                                                                        member.value
+                                                                    }
+                                                                >
+                                                                    {
+                                                                        member.label
+                                                                    }
+                                                                </SelectItem>
+                                                            ),
+                                                        )}
+                                                    </SelectContent>
+                                                </Select>
                                                 <InputError
                                                     message={
                                                         errors.responsible_user_id
@@ -409,28 +436,46 @@ export default function DependenciesShow({
                                 dependency.id,
                             )}
                             resetOnSuccess
+                            /*
+                             * A reset clears the native fields, but the
+                             * branded trigger keeps whatever it was showing —
+                             * so the type is controlled and reset with them,
+                             * or the form would display one thing and submit
+                             * another.
+                             */
+                            onSuccess={() => setEventType('reminded')}
                             className="flex flex-wrap items-end gap-3 px-4 py-4"
                         >
                             {({ processing, errors }) => (
                                 <>
                                     <div className="grid gap-2">
                                         <Label htmlFor="type">What</Label>
-                                        <select
-                                            id="type"
+                                        <Select
                                             name="type"
-                                            defaultValue="reminded"
-                                            className={cn(selectClass, 'w-44')}
-                                            data-test="event-type"
+                                            value={eventType}
+                                            onValueChange={setEventType}
                                         >
-                                            {eventTypes.map((type) => (
-                                                <option
-                                                    key={type.value}
-                                                    value={type.value}
-                                                >
-                                                    {type.label}
-                                                </option>
-                                            ))}
-                                        </select>
+                                            <SelectTrigger
+                                                id="type"
+                                                data-test="event-type"
+                                                className={cn(
+                                                    selectTriggerClass,
+                                                    'w-44',
+                                                )}
+                                            >
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {eventTypes.map((type) => (
+                                                    <SelectItem
+                                                        key={type.value}
+                                                        value={type.value}
+                                                    >
+                                                        {type.label}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
                                         <InputError message={errors.type} />
                                     </div>
                                     <div className="grid gap-2">

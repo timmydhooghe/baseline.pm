@@ -3,6 +3,9 @@ import { useState } from 'react';
 import RiskController from '@/actions/App/Http/Controllers/RiskController';
 import InputError from '@/components/input-error';
 import LinkedRecordsField from '@/components/linked-records-field';
+import OptionalSelect, {
+    selectTriggerClass,
+} from '@/components/optional-select';
 import RecordChipList from '@/components/record-chip-list';
 import RiskRatingBadge from '@/components/risk-rating-badge';
 import { Button } from '@/components/ui/button';
@@ -15,6 +18,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import {
     index as engagements,
@@ -57,9 +67,6 @@ const tableHeading =
 
 const fieldClass =
     'rounded-none border-[1.5px] border-ink shadow-none dark:border-paper';
-
-const selectClass =
-    'h-10 w-full rounded-none border-[1.5px] border-ink bg-transparent px-3 text-[14px] shadow-none outline-none dark:border-paper';
 
 const ratings = [
     { value: 'low', label: 'Low' },
@@ -203,97 +210,94 @@ export default function EngagementRisks({
                                                         <Label htmlFor="probability">
                                                             Probability
                                                         </Label>
-                                                        <select
-                                                            id="probability"
+                                                        <Select
                                                             name="probability"
                                                             defaultValue="medium"
-                                                            className={
-                                                                selectClass
-                                                            }
-                                                            data-test="risk-probability"
                                                         >
-                                                            {ratings.map(
-                                                                (rating) => (
-                                                                    <option
-                                                                        key={
-                                                                            rating.value
-                                                                        }
-                                                                        value={
-                                                                            rating.value
-                                                                        }
-                                                                    >
-                                                                        {
-                                                                            rating.label
-                                                                        }
-                                                                    </option>
-                                                                ),
-                                                            )}
-                                                        </select>
+                                                            <SelectTrigger
+                                                                id="probability"
+                                                                data-test="risk-probability"
+                                                                className={
+                                                                    selectTriggerClass
+                                                                }
+                                                            >
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {ratings.map(
+                                                                    (
+                                                                        rating,
+                                                                    ) => (
+                                                                        <SelectItem
+                                                                            key={
+                                                                                rating.value
+                                                                            }
+                                                                            value={
+                                                                                rating.value
+                                                                            }
+                                                                        >
+                                                                            {
+                                                                                rating.label
+                                                                            }
+                                                                        </SelectItem>
+                                                                    ),
+                                                                )}
+                                                            </SelectContent>
+                                                        </Select>
                                                     </div>
                                                     <div className="grid gap-2">
                                                         <Label htmlFor="impact">
                                                             Impact
                                                         </Label>
-                                                        <select
-                                                            id="impact"
+                                                        <Select
                                                             name="impact"
                                                             defaultValue="medium"
-                                                            className={
-                                                                selectClass
-                                                            }
-                                                            data-test="risk-impact"
                                                         >
-                                                            {ratings.map(
-                                                                (rating) => (
-                                                                    <option
-                                                                        key={
-                                                                            rating.value
-                                                                        }
-                                                                        value={
-                                                                            rating.value
-                                                                        }
-                                                                    >
-                                                                        {
-                                                                            rating.label
-                                                                        }
-                                                                    </option>
-                                                                ),
-                                                            )}
-                                                        </select>
+                                                            <SelectTrigger
+                                                                id="impact"
+                                                                data-test="risk-impact"
+                                                                className={
+                                                                    selectTriggerClass
+                                                                }
+                                                            >
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {ratings.map(
+                                                                    (
+                                                                        rating,
+                                                                    ) => (
+                                                                        <SelectItem
+                                                                            key={
+                                                                                rating.value
+                                                                            }
+                                                                            value={
+                                                                                rating.value
+                                                                            }
+                                                                        >
+                                                                            {
+                                                                                rating.label
+                                                                            }
+                                                                        </SelectItem>
+                                                                    ),
+                                                                )}
+                                                            </SelectContent>
+                                                        </Select>
                                                     </div>
                                                     <div className="grid gap-2">
                                                         <Label htmlFor="owner_id">
                                                             Owner
                                                         </Label>
-                                                        <select
-                                                            id="owner_id"
+                                                        <OptionalSelect
                                                             name="owner_id"
-                                                            defaultValue=""
-                                                            className={
-                                                                selectClass
+                                                            id="owner_id"
+                                                            options={
+                                                                options.members
                                                             }
-                                                            data-test="risk-owner"
-                                                        >
-                                                            <option value="">
-                                                                Unassigned
-                                                            </option>
-                                                            {options.members.map(
-                                                                (member) => (
-                                                                    <option
-                                                                        key={
-                                                                            member.value
-                                                                        }
-                                                                        value={
-                                                                            member.value
-                                                                        }
-                                                                    >
-                                                                        {
-                                                                            member.label
-                                                                        }
-                                                                    </option>
-                                                                ),
-                                                            )}
-                                                        </select>
+                                                            placeholder="Unassigned"
+                                                            emptyLabel="Unassigned"
+                                                            testId="risk-owner"
+                                                        />
                                                     </div>
                                                 </div>
                                                 <input

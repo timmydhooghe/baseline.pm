@@ -4,12 +4,21 @@ import DecisionConfirmationController from '@/actions/App/Http/Controllers/Decis
 import DecisionController from '@/actions/App/Http/Controllers/DecisionController';
 import InputError from '@/components/input-error';
 import LinkedRecordsField from '@/components/linked-records-field';
+import OptionalSelect, {
+    selectTriggerClass,
+} from '@/components/optional-select';
 import RecordChipList from '@/components/record-chip-list';
 import StructuredRowsField from '@/components/structured-rows-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { cn } from '@/lib/utils';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { show as decisionShow } from '@/routes/decisions';
 import {
     index as engagements,
@@ -245,31 +254,17 @@ export default function DecisionsShow({
                                             <Label htmlFor="decided_by">
                                                 Decision owner
                                             </Label>
-                                            <select
-                                                id="decided_by"
+                                            <OptionalSelect
                                                 name="decided_by"
+                                                id="decided_by"
+                                                options={options.members}
                                                 defaultValue={
-                                                    decision.decidedById ?? ''
+                                                    decision.decidedById
                                                 }
-                                                className={cn(
-                                                    textareaClass,
-                                                    'h-10 py-0',
-                                                )}
-                                            >
-                                                <option value="">
-                                                    Not recorded
-                                                </option>
-                                                {options.members.map(
-                                                    (member) => (
-                                                        <option
-                                                            key={member.value}
-                                                            value={member.value}
-                                                        >
-                                                            {member.label}
-                                                        </option>
-                                                    ),
-                                                )}
-                                            </select>
+                                                placeholder="Not recorded"
+                                                emptyLabel="Not recorded"
+                                                testId="edit-decided-by"
+                                            />
                                         </div>
                                     </div>
                                     <div className="grid gap-4 sm:grid-cols-3">
@@ -329,23 +324,26 @@ export default function DecisionsShow({
                                         <Label htmlFor="visibility">
                                             Visibility
                                         </Label>
-                                        <select
-                                            id="visibility"
+                                        <Select
                                             name="visibility"
                                             defaultValue={decision.visibility}
-                                            className={cn(
-                                                textareaClass,
-                                                'h-10 py-0',
-                                            )}
-                                            data-test="edit-visibility"
                                         >
-                                            <option value="internal">
-                                                Internal
-                                            </option>
-                                            <option value="shared">
-                                                Shared with the customer
-                                            </option>
-                                        </select>
+                                            <SelectTrigger
+                                                id="visibility"
+                                                data-test="edit-visibility"
+                                                className={selectTriggerClass}
+                                            >
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="internal">
+                                                    Internal
+                                                </SelectItem>
+                                                <SelectItem value="shared">
+                                                    Shared with the customer
+                                                </SelectItem>
+                                            </SelectContent>
+                                        </Select>
                                         <p className="text-[12px] text-stone dark:text-fog">
                                             A shared record freezes a
                                             customer-facing snapshot when it is
@@ -359,39 +357,20 @@ export default function DecisionsShow({
                                                 <Label htmlFor="supersedes_id">
                                                     Supersedes
                                                 </Label>
-                                                <select
-                                                    id="supersedes_id"
+                                                <OptionalSelect
                                                     name="supersedes_id"
-                                                    defaultValue={
-                                                        decision.supersedesId ??
-                                                        ''
+                                                    id="supersedes_id"
+                                                    options={
+                                                        options.supersedable ??
+                                                        []
                                                     }
-                                                    className={cn(
-                                                        textareaClass,
-                                                        'h-10 py-0',
-                                                    )}
-                                                    data-test="edit-supersedes"
-                                                >
-                                                    <option value="">
-                                                        Nothing
-                                                    </option>
-                                                    {options.supersedable.map(
-                                                        (candidate) => (
-                                                            <option
-                                                                key={
-                                                                    candidate.value
-                                                                }
-                                                                value={
-                                                                    candidate.value
-                                                                }
-                                                            >
-                                                                {
-                                                                    candidate.label
-                                                                }
-                                                            </option>
-                                                        ),
-                                                    )}
-                                                </select>
+                                                    defaultValue={
+                                                        decision.supersedesId
+                                                    }
+                                                    placeholder="Nothing"
+                                                    emptyLabel="Nothing"
+                                                    testId="edit-supersedes"
+                                                />
                                                 <InputError
                                                     message={
                                                         errors.supersedes_id
