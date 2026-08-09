@@ -365,9 +365,15 @@ class Engagement extends Model
      * pages. The waterfall's remaining lines — burned, pending CRs, accepted
      * value — arrive with their own features (FA-14, FA-16, FA-23).
      *
+     * The unbilled-risk price derives from sell rates, so it follows the
+     * rate card policy: callers pass whether the viewer may read commercial
+     * figures, and for everyone else the price is structurally absent while
+     * the queue size stays visible. The contracted value is not stripped —
+     * members already see it on the baseline page.
+     *
      * @return array<string, mixed>
      */
-    public function positionSummary(): array
+    public function positionSummary(bool $withCommercials): array
     {
         $approved = $this->approvedBaseline();
         $risk = $this->unbilledRisk();
@@ -379,7 +385,7 @@ class Engagement extends Model
             'unbilledRisk' => [
                 'count' => $risk['count'],
                 'unpriced' => $risk['unpriced'],
-                'price' => $risk['price']->toArray(),
+                'price' => $withCommercials ? $risk['price']->toArray() : null,
             ],
         ];
     }

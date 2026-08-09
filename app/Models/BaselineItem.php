@@ -61,6 +61,21 @@ class BaselineItem extends Model
         static::creating($guard);
         static::updating($guard);
         static::deleting($guard);
+
+        /*
+         * Without this, the DB cascade would silently drop work mappings —
+         * no audit trail — and leave existing-scope classifications
+         * orphaned: unmapped work the triage inbox would never surface
+         * again. Unlinking through the model keeps the removal audited and
+         * resets the classification, so the work re-enters drift (FA-9).
+         */
+        static::deleting(function (BaselineItem $item): void {
+            WorkItemLink::query()
+                ->where('baseline_item_id', $item->id)
+                ->with('workItem')
+                ->get()
+                ->each(fn (WorkItemLink $link) => $link->workItem->unlink());
+        });
     }
 
     /**

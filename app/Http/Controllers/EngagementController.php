@@ -8,6 +8,7 @@ use App\Http\Requests\Engagements\TransitionEngagementRequest;
 use App\Models\Customer;
 use App\Models\Engagement;
 use App\Models\IntegrationConnection;
+use App\Models\RateCardVersion;
 use App\Models\User;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -144,7 +145,7 @@ class EngagementController extends Controller
                     'value' => $status->value,
                     'label' => $status->label(),
                 ]),
-            'position' => $engagement->positionSummary(),
+            'position' => $engagement->positionSummary($request->user()?->can('viewAny', RateCardVersion::class) ?? false),
             'can' => [
                 'transition' => $request->user()?->can('transition', $engagement) ?? false,
                 'viewCustomer' => $request->user()?->can('view', $engagement->customer) ?? false,

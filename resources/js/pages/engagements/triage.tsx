@@ -137,8 +137,10 @@ export default function EngagementsTriage({
         {
             label: 'Unbilled risk',
             value:
-                position.unbilledRisk.price.formatted +
-                (position.unbilledRisk.unpriced > 0 ? '+' : ''),
+                position.unbilledRisk.price === null
+                    ? '—'
+                    : position.unbilledRisk.price.formatted +
+                      (position.unbilledRisk.unpriced > 0 ? '+' : ''),
             warn: position.unbilledRisk.count > 0,
         },
         {
@@ -161,9 +163,11 @@ export default function EngagementsTriage({
                             {engagement.name}
                         </h1>
                         <p className="mt-1 text-[14px] text-stone dark:text-fog">
-                            {pricing.available
-                                ? `Cost ${pricing.costPerDay?.formatted}/day · price ${pricing.sellPerDay?.formatted}/day — blended from baseline v${pricing.baselineVersion} (rate card v${pricing.rateCardVersion}), ${pricing.hoursPerDay}h days.`
-                                : 'No pinned rate card yet — drift surfaces unpriced until a baseline carries one.'}
+                            {!pricing.visible
+                                ? 'Commercial figures follow the rate card policy — managing roles see cost and price here.'
+                                : pricing.available
+                                  ? `Cost ${pricing.costPerDay?.formatted}/day · price ${pricing.sellPerDay?.formatted}/day — blended from baseline v${pricing.baselineVersion} (rate card v${pricing.rateCardVersion}), ${pricing.hoursPerDay}h days.`
+                                  : 'No pinned rate card yet — drift surfaces unpriced until a baseline carries one.'}
                             {nearestMilestone !== null &&
                                 ` Next milestone: ${nearestMilestone.title}${
                                     nearestMilestone.daysUntil !== null

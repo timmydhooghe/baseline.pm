@@ -22,6 +22,7 @@ use App\Models\User;
 use App\Models\WorkItem;
 use App\Models\WorkItemWorklog;
 use App\ValueObjects\Money;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia;
 
@@ -406,4 +407,120 @@ test('classifying drift is a governance call reserved for managers', function ()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('can.triage', false)
             ->etc());
+});
+
+test('members see the drift queue but never rates, cost or price', function () {
+    ['user' => $member, 'organization' => $organization, 'engagement' => $engagement] = triageSetup(UserRole::Member);
+
+    WorkItem::factory()->for($organization)->for($engagement)->create([
+        'estimate_value' => 1,
+        'estimate_unit' => EstimateUnit::Days,
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('engagements.triage.show', $engagement))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('pricing.visible', false)
+            ->where('pricing.costPerDay', null)
+            ->where('pricing.sellPerDay', null)
+            ->where('inbox.0.effortDays', 1)
+            ->where('inbox.0.cost', null)
+            ->where('inbox.0.price', null)
+            ->where('position.unbilledRisk.count', 1)
+            ->where('position.unbilledRisk.price', null)
+            ->etc());
+
+    $this->actingAs($member)
+        ->get(route('engagements.work.show', $engagement))
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('position.unbilledRisk.price', null)
+            ->etc());
+});
+
+test('a classified item cannot be mapped until it is reclassified as existing scope', function () {
+    Queue::fake();
+
+    ['user' => $user, 'organization' => $organization, 'engagement' => $engagement, 'deliverable' => $deliverable] = triageSetup();
+
+    $item = WorkItem::factory()->for($organization)->for($engagement)->create();
+    $item->triage(WorkItemTriageStatus::Operational, $user, note: 'Internal tooling.');
+
+    $this->actingAs($user)
+        ->post(route('engagements.work-item-links.store', $engagement), [
+            'work_item_ids' => [$item->id],
+            'baseline_item_id' => $deliverable->id,
+        ])
+        ->assertInvalid(['work_item_ids']);
+
+    expect($item->refresh()->link)->toBeNull();
+
+    // Reclassifying as existing scope in the inbox is the audited way back in.
+    $this->actingAs($user)
+        ->post(route('work-items.triage.store', $item), [
+            'classification' => 'existing_scope',
+            'baseline_item_id' => $deliverable->id,
+        ])
+        ->assertRedirect();
+
+    $item->refresh();
+
+    expect($item->triage_status)->toBe(WorkItemTriageStatus::ExistingScope)
+        ->and($item->link?->baseline_item_id)->toBe($deliverable->id);
+});
+
+test('deleting a draft deliverable unlinks its work and returns it to drift', function () {
+    Queue::fake();
+
+    ['user' => $user, 'organization' => $organization, 'engagement' => $engagement, 'baseline' => $baseline, 'deliverable' => $deliverable] = triageSetup(approveBaseline: false);
+
+    $item = WorkItem::factory()->for($organization)->for($engagement)->create();
+    $item->triage(WorkItemTriageStatus::ExistingScope, $user, $deliverable);
+
+    expect($engagement->driftWorkItems()->count())->toBe(0);
+
+    $this->actingAs($user)
+        ->delete(route('baselines.items.destroy', [$baseline, $deliverable]))
+        ->assertRedirect();
+
+    $item->refresh();
+
+    expect($item->link)->toBeNull()
+        ->and($item->triage_status)->toBeNull()
+        ->and($engagement->driftWorkItems()->count())->toBe(1)
+        ->and(AuditLog::query()->where('action', 'work_item.unlinked')->count())->toBe(1);
+});
+
+test('reclassifying a potential change discards the draft change request', function () {
+    ['user' => $user, 'organization' => $organization, 'engagement' => $engagement] = triageSetup();
+
+    $item = WorkItem::factory()->for($organization)->for($engagement)->create([
+        'estimate_value' => 1,
+        'estimate_unit' => EstimateUnit::Days,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('work-items.triage.store', $item), ['classification' => 'potential_change'])
+        ->assertRedirect();
+
+    expect(ChangeRequest::query()->count())->toBe(1);
+
+    $this->actingAs($user)
+        ->post(route('work-items.triage.store', $item), ['classification' => 'dismissed'])
+        ->assertRedirect();
+
+    expect(ChangeRequest::query()->count())->toBe(0)
+        ->and($item->refresh()->triage_status)->toBe(WorkItemTriageStatus::Dismissed)
+        ->and(AuditLog::query()->where('action', 'change_request.discarded')->count())->toBe(1);
+});
+
+test('the database refuses a second change request for the same work item', function () {
+    ['organization' => $organization, 'engagement' => $engagement] = triageSetup();
+
+    $item = WorkItem::factory()->for($organization)->for($engagement)->create();
+
+    ChangeRequest::factory()->for($organization)->for($engagement)->create(['work_item_id' => $item->id]);
+
+    expect(fn () => ChangeRequest::factory()->for($organization)->for($engagement)->create(['work_item_id' => $item->id]))
+        ->toThrow(UniqueConstraintViolationException::class);
 });

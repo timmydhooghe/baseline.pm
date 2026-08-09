@@ -32,6 +32,7 @@ export type EngagementPositionSummary = {
     unbilledRisk: {
         count: number;
         unpriced: number;
-        price: Money;
+        /** Absent for viewers without rate card access — sell-rate-derived. */
+        price: Money | null;
     };
 };

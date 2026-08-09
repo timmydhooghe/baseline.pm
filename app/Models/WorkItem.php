@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\BaselineItemType;
+use App\Enums\ChangeRequestStatus;
 use App\Enums\EstimateUnit;
 use App\Enums\IntegrationConnectionStatus;
 use App\Enums\WorkItemSource;
@@ -96,6 +97,22 @@ class WorkItem extends Model
             ]);
         }
 
+        /*
+         * A triage decision is a governance call: mapping an item classified
+         * as operational, dismissed or a potential change would contradict
+         * the record (and strand any drafted change request). Reclassifying
+         * it as existing scope in the inbox is the audited way back in —
+         * triage() records that status before it links.
+         */
+        if ($this->triage_status !== null && $this->triage_status !== WorkItemTriageStatus::ExistingScope) {
+            throw ValidationException::withMessages([
+                'work_item_ids' => __('“:item” was classified as :classification — reclassify it in the triage inbox before mapping it.', [
+                    'item' => $this->external_key ?? $this->title,
+                    'classification' => $this->triage_status->label(),
+                ]),
+            ]);
+        }
+
         $link = DB::transaction(function () use ($deliverable, $actor): WorkItemLink {
             $this->link?->delete();
 
@@ -170,7 +187,10 @@ class WorkItem extends Model
      * audit log — dismissals included, so the call stays on record. Existing
      * scope must name the deliverable that absorbs the work; excluding work
      * as operational must log the explanation; a potential change drafts a
-     * change request pre-filled from the item.
+     * change request pre-filled from the item, and reclassifying away from
+     * potential change discards that draft again. Runs under a row lock so
+     * concurrent decisions on the same item serialize instead of e.g. both
+     * drafting a change request.
      */
     public function triage(
         WorkItemTriageStatus $status,
@@ -178,12 +198,6 @@ class WorkItem extends Model
         ?BaselineItem $deliverable = null,
         ?string $note = null,
     ): void {
-        if ($this->link !== null) {
-            throw ValidationException::withMessages([
-                'classification' => __('This item is already mapped to a deliverable — it is not drift.'),
-            ]);
-        }
-
         if ($status === WorkItemTriageStatus::ExistingScope && $deliverable === null) {
             throw ValidationException::withMessages([
                 'baseline_item_id' => __('Existing scope requires the deliverable that absorbs the work.'),
@@ -197,21 +211,39 @@ class WorkItem extends Model
         }
 
         DB::transaction(function () use ($status, $actor, $deliverable, $note): void {
-            $changeRequest = null;
+            self::query()->whereKey($this->id)->lockForUpdate()->first();
+            $this->refresh();
+
+            if ($this->link !== null) {
+                throw ValidationException::withMessages([
+                    'classification' => __('This item is already mapped to a deliverable — it is not drift.'),
+                ]);
+            }
+
+            $changeRequest = $this->changeRequest;
+
+            if ($status !== WorkItemTriageStatus::PotentialChange && $changeRequest !== null) {
+                $this->discardDraftChangeRequest($changeRequest, $status, $actor);
+                $changeRequest = null;
+            }
+
+            /*
+             * The classification is written before any mapping: linkTo()
+             * refuses items classified as anything but existing scope.
+             */
+            $this->triage_status = $status;
+            $this->triage_note = $note;
+            $this->triaged_by = $actor->id;
+            $this->triaged_at = now();
+            $this->save();
 
             if ($status === WorkItemTriageStatus::ExistingScope) {
                 $this->linkTo($deliverable, $actor);
             }
 
             if ($status === WorkItemTriageStatus::PotentialChange) {
-                $changeRequest = $this->changeRequest ?? $this->draftChangeRequest($actor);
+                $changeRequest ??= $this->draftChangeRequest($actor);
             }
-
-            $this->triage_status = $status;
-            $this->triage_note = $note;
-            $this->triaged_by = $actor->id;
-            $this->triaged_at = now();
-            $this->save();
 
             AuditLog::record('work_item.triaged', $this, [
                 'classification' => $status->value,
@@ -290,6 +322,37 @@ class WorkItem extends Model
             'cost' => Money::fromCents((int) round($days * $rates['cost']->amount)),
             'price' => Money::fromCents((int) round($days * $rates['sell']->amount)),
         ];
+    }
+
+    /**
+     * A reclassification away from potential change makes the drift-born
+     * draft moot: discard it, audited, so no stale change request lingers
+     * next to a dismissed or operational item. Once change control has
+     * moved the request beyond draft it is a governance record in flight —
+     * the origin item can no longer be quietly reclassified underneath it.
+     */
+    protected function discardDraftChangeRequest(
+        ChangeRequest $changeRequest,
+        WorkItemTriageStatus $reclassifiedAs,
+        User $actor,
+    ): void {
+        if ($changeRequest->status !== ChangeRequestStatus::Draft) {
+            throw ValidationException::withMessages([
+                'classification' => __('A change request for this item is already :status — resolve it in change control first.', [
+                    'status' => mb_strtolower($changeRequest->status->label()),
+                ]),
+            ]);
+        }
+
+        AuditLog::record('change_request.discarded', $changeRequest, [
+            'work_item' => $this->external_key ?? $this->title,
+            'title' => $changeRequest->title,
+            'reclassified_as' => $reclassifiedAs->value,
+            'discarded_by' => $actor->name,
+        ]);
+
+        $changeRequest->delete();
+        $this->setRelation('changeRequest', null);
     }
 
     /**
