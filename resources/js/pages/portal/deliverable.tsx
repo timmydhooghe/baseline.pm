@@ -23,6 +23,7 @@ type Props = {
     };
     stakeholder: { name: string };
     responses: DeliverableResponseView[];
+    superseded: boolean;
     canRespond: boolean;
     respondUrl: string;
 };
@@ -53,6 +54,7 @@ export default function PortalDeliverable({
     deliverable,
     stakeholder,
     responses,
+    superseded,
     canRespond,
     respondUrl,
 }: Props) {
@@ -66,6 +68,16 @@ export default function PortalDeliverable({
                 title={details.title}
                 intro={`Reviewing as ${stakeholder.name}. This record is frozen — your response is recorded immutably against exactly what you see here, and accepting is signing.`}
             >
+                {superseded && (
+                    <div
+                        className="border-[1.5px] border-ochre px-4 py-3 font-plex-mono text-[12px] font-semibold text-ochre uppercase"
+                        data-test="superseded-banner"
+                    >
+                        This deliverable has been revised since this link was
+                        sent — it stays here for your records, but the decision
+                        happens on the latest version in your inbox.
+                    </div>
+                )}
                 {deliverable.status === 'accepted' && (
                     <div className="border-[1.5px] border-moss px-4 py-3 font-plex-mono text-[12px] font-semibold text-moss uppercase">
                         Accepted {deliverable.acceptedAt} — signed off as

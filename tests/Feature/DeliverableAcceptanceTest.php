@@ -520,6 +520,7 @@ test('the portal shows the frozen record on a personally signed link', function 
     $signed = URL::signedRoute('portal.deliverables.show', [
         'deliverable' => $record->id,
         'stakeholder' => $approver->id,
+        'snapshot' => $record->refresh()->customer_snapshot_id,
     ]);
 
     $this->get($signed)
@@ -528,6 +529,7 @@ test('the portal shows the frozen record on a personally signed link', function 
             ->component('portal/deliverable')
             ->where('review.deliverable.title', 'Checkout flow')
             ->where('review.value.amount', 1200000)
+            ->where('superseded', false)
             ->where('canRespond', true)
             ->where('stakeholder.name', 'Anders Vik'));
 
@@ -535,6 +537,7 @@ test('the portal shows the frozen record on a personally signed link', function 
     $this->get(route('portal.deliverables.show', [
         'deliverable' => $record->id,
         'stakeholder' => $approver->id,
+        'snapshot' => $record->customer_snapshot_id,
     ]))->assertForbidden();
 });
 
@@ -878,7 +881,7 @@ test('the frozen record carries the deadline the customer is asked to meet', fun
         ->and($record->reviewSnapshot?->payload['respond_by'])->toBe(today()->addDays(14)->toDateString());
 });
 
-test('a superseded review link cannot sign the record that replaced it', function () {
+test('a stale portal link cannot sign a revised deliverable', function () {
     Notification::fake();
 
     $setup = acceptanceSetup();
@@ -887,51 +890,70 @@ test('a superseded review link cannot sign the record that replaced it', functio
     linkCriterionEvidence($record, $manager);
     $record->submitForAcceptance(today()->addDays(14), $manager);
 
-    // The approver opens the review and keeps the form: this link carries
-    // the snapshot they actually read.
-    $staleUrl = URL::signedRoute('portal.deliverables.respond', [
+    $staleSnapshotId = $record->refresh()->customer_snapshot_id;
+    $staleRespond = URL::signedRoute('portal.deliverables.respond', [
         'deliverable' => $record->id,
         'stakeholder' => $approver->id,
-        'snapshot' => $record->refresh()->customer_snapshot_id,
+        'snapshot' => $staleSnapshotId,
     ]);
 
-    // A clarification reopens the record; rework and resubmission freeze a
-    // different one.
+    // A clarification round reworks the record and freezes fresh snapshots.
     $record->recordResponse($approver, AcceptanceDecision::ClarificationRequested, 'Which browsers were tested?');
     $record->refresh()->update(['progress' => 95]);
     $record->submitForAcceptance(today()->addDays(7), $manager);
 
-    $this->post($staleUrl, ['decision' => 'accepted'])->assertRedirect();
+    // The old tab still shows 0% progress — its link cannot sign 95%.
+    $this->post($staleRespond, ['decision' => 'accepted'])->assertInvalid(['decision']);
 
     expect($record->refresh()->status)->toBe(DeliverableStatus::AwaitingAcceptance)
-        ->and($record->responses()->where('decision', AcceptanceDecision::Accepted)->exists())->toBeFalse();
+        ->and($record->responses)->toHaveCount(1);
 
-    // The link the portal mints for the current record signs it.
+    // The superseded link keeps showing what it always showed, read-only.
+    $this->get(URL::signedRoute('portal.deliverables.show', [
+        'deliverable' => $record->id,
+        'stakeholder' => $approver->id,
+        'snapshot' => $staleSnapshotId,
+    ]))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('review.progress', 0)
+            ->where('superseded', true)
+            ->where('canRespond', false));
+
+    // The fresh link signs as usual, recorded against the fresh snapshot.
     $this->post(URL::signedRoute('portal.deliverables.respond', [
         'deliverable' => $record->id,
         'stakeholder' => $approver->id,
         'snapshot' => $record->customer_snapshot_id,
     ]), ['decision' => 'accepted'])->assertRedirect();
 
-    expect($record->refresh()->status)->toBe(DeliverableStatus::Accepted);
+    $record->refresh();
+
+    expect($record->status)->toBe(DeliverableStatus::Accepted)
+        ->and($record->responses->firstWhere('decision', AcceptanceDecision::Accepted)?->snapshot_id)
+        ->toBe($record->customer_snapshot_id);
 });
 
-test('the portal mints its respond link for the snapshot on screen', function () {
+test('a review link naming a snapshot of another record is refused', function () {
     Notification::fake();
 
     $setup = acceptanceSetup();
-    ['manager' => $manager, 'approver' => $approver, 'checkoutRecord' => $record] = $setup;
+    ['manager' => $manager, 'approver' => $approver, 'checkoutRecord' => $record, 'reportingRecord' => $other] = $setup;
 
     linkCriterionEvidence($record, $manager);
     $record->submitForAcceptance(today()->addDays(14), $manager);
+    linkCriterionEvidence($other, $manager);
+    $other->submitForAcceptance(today()->addDays(14), $manager);
 
-    $this->get(URL::signedRoute('portal.deliverables.show', [
-        'deliverable' => $record->id,
-        'stakeholder' => $approver->id,
-    ]))
-        ->assertOk()
-        ->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('respondUrl', fn (string $url): bool => str_contains($url, 'snapshot='.$record->refresh()->customer_snapshot_id)));
+    // The snapshot lookup is scoped to its own deliverable, and the internal
+    // twin is never a customer-facing record.
+    foreach ([$other->refresh()->customer_snapshot_id, $record->refresh()->review_snapshot_id] as $foreignSnapshotId) {
+        $this->get(URL::signedRoute('portal.deliverables.show', [
+            'deliverable' => $record->id,
+            'stakeholder' => $approver->id,
+            'snapshot' => $foreignSnapshotId,
+        ]))->assertNotFound();
+    }
 });
 
 test('submission needs someone who can sign, and can be withdrawn when nobody can', function () {

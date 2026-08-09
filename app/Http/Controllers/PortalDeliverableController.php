@@ -6,11 +6,13 @@ use App\Enums\AcceptanceDecision;
 use App\Enums\DeliverableStatus;
 use App\Models\Deliverable;
 use App\Models\DeliverableResponse;
+use App\Models\Snapshot;
 use App\Models\Stakeholder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -19,23 +21,23 @@ use Inertia\Response;
  * approval rights reviews the frozen customer-visible record — progress,
  * criteria and shared evidence, never confidence, cost or internal evidence
  * — and responds. Access is authenticated by the personally signed link
- * from the notification; the stakeholder route parameter is covered by the
- * signature, so it cannot be swapped.
+ * from the notification; the stakeholder and snapshot parameters are covered
+ * by the signature, so neither can be swapped. Binding the link to the
+ * snapshot means a page opened before a rework round can never sign a record
+ * it did not display — superseded links keep showing what they always
+ * showed, read-only.
  */
 class PortalDeliverableController extends Controller
 {
     /**
-     * Show the frozen record to the approver.
+     * Show the frozen record the link was issued for.
      */
     public function show(Request $request, Deliverable $deliverable, Stakeholder $stakeholder): Response
     {
         $this->authorizeStakeholder($deliverable, $stakeholder);
 
-        $snapshot = $deliverable->customerSnapshot;
-
-        if ($snapshot === null) {
-            abort(404);
-        }
+        $snapshot = $this->signedSnapshot($request, $deliverable);
+        $isCurrent = $snapshot->id === $deliverable->customer_snapshot_id;
 
         return Inertia::render('portal/deliverable', [
             'review' => $snapshot->payload,
@@ -61,11 +63,8 @@ class PortalDeliverableController extends Controller
                     'respondedAt' => $response->created_at->toFormattedDateString(),
                 ])
                 ->values(),
-            'canRespond' => $deliverable->status === DeliverableStatus::AwaitingAcceptance,
-            /*
-             * The respond link is minted for the snapshot on screen, so a
-             * signature can only ever land on the record it was read from.
-             */
+            'superseded' => ! $isCurrent,
+            'canRespond' => $isCurrent && $deliverable->status === DeliverableStatus::AwaitingAcceptance,
             'respondUrl' => URL::signedRoute('portal.deliverables.respond', [
                 'deliverable' => $deliverable->id,
                 'stakeholder' => $stakeholder->id,
@@ -81,19 +80,12 @@ class PortalDeliverableController extends Controller
     {
         $this->authorizeStakeholder($deliverable, $stakeholder);
 
-        /*
-         * A deliverable that was withdrawn, reworked and resubmitted carries
-         * a different frozen record than the one this form was rendered from.
-         * Signing binds the reviewer to what they actually read, so a stale
-         * form is sent back to the current version instead of deciding on it.
-         */
-        if ($request->query('snapshot') !== $deliverable->customer_snapshot_id) {
-            Inertia::flash('toast', ['type' => 'warning', 'message' => __('This deliverable was revised after you opened it — please review the current version before deciding.')]);
+        $snapshot = $this->signedSnapshot($request, $deliverable);
 
-            return redirect()->to(URL::signedRoute('portal.deliverables.show', [
-                'deliverable' => $deliverable->id,
-                'stakeholder' => $stakeholder->id,
-            ]));
+        if ($snapshot->id !== $deliverable->customer_snapshot_id) {
+            throw ValidationException::withMessages([
+                'decision' => __('This deliverable was revised after this page was opened — review the latest version from your most recent email.'),
+            ]);
         }
 
         $validated = $request->validate([
@@ -115,7 +107,27 @@ class PortalDeliverableController extends Controller
         return redirect()->to(URL::signedRoute('portal.deliverables.show', [
             'deliverable' => $deliverable->id,
             'stakeholder' => $stakeholder->id,
+            'snapshot' => $snapshot->id,
         ]));
+    }
+
+    /**
+     * The customer snapshot this signed link was issued for. The id travels
+     * as a signed query parameter, so it can only ever name a snapshot this
+     * application put in a link — the lookup is still scoped to the
+     * deliverable and to customer-facing payloads as defence in depth.
+     */
+    private function signedSnapshot(Request $request, Deliverable $deliverable): Snapshot
+    {
+        $snapshot = $deliverable->snapshots()
+            ->whereKey((string) $request->query('snapshot'))
+            ->first();
+
+        if ($snapshot === null || ($snapshot->payload['kind'] ?? null) !== 'customer_review') {
+            abort(404);
+        }
+
+        return $snapshot;
     }
 
     /**

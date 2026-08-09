@@ -53,6 +53,7 @@ class DeliverableSubmitted extends Notification implements ShouldQueue
             ->action(__('Review the deliverable'), URL::signedRoute('portal.deliverables.show', [
                 'deliverable' => $this->deliverable->id,
                 'stakeholder' => $notifiable->id,
+                'snapshot' => $this->deliverable->customer_snapshot_id,
             ]))
             ->line(__('Please respond by :date. Your decision is recorded immutably against the frozen record — accepting is signing.', [
                 'date' => $this->deliverable->respond_by?->toFormattedDateString() ?? '—',
