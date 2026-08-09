@@ -10,6 +10,7 @@ use App\Models\Deliverable;
 use App\Models\DeliverableEvidence;
 use App\Models\DeliverableResponse;
 use App\Models\Engagement;
+use App\Models\RateCardVersion;
 use App\ValueObjects\Money;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -98,7 +99,7 @@ class MilestoneAcceptancePackController extends Controller
                     ->toArray(),
             ],
             'complete' => $deliverables->isNotEmpty() && $accepted->count() === $deliverables->count(),
-            'position' => $engagement->positionSummary(),
+            'position' => $engagement->positionSummary($request->user()?->can('viewAny', RateCardVersion::class) ?? false),
         ]);
     }
 }

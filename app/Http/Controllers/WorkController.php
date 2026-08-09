@@ -8,6 +8,7 @@ use App\Models\BaselineItem;
 use App\Models\Engagement;
 use App\Models\IntegrationAccount;
 use App\Models\IntegrationConnection;
+use App\Models\RateCardVersion;
 use App\Models\Release;
 use App\Models\SyncRun;
 use App\Models\User;
@@ -79,7 +80,7 @@ class WorkController extends Controller
                 'linked' => $workItems->filter(fn (WorkItem $item): bool => $item->link !== null)->count(),
                 'unlinked' => $workItems->filter(fn (WorkItem $item): bool => $item->link === null)->count(),
             ],
-            'position' => $engagement->positionSummary(),
+            'position' => $engagement->positionSummary($user->can('viewAny', RateCardVersion::class)),
             'deliverables' => $deliverables
                 ->map(fn (BaselineItem $item): array => [
                     'id' => $item->id,

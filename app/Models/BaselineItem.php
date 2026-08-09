@@ -37,14 +37,16 @@ use LogicException;
  * @property list<array{criterion: string, verification_method: string|null}>|null $acceptance_criteria
  * @property Carbon|null $baseline_date
  * @property string|null $payment_trigger
+ * @property string|null $source_item_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Organization $organization
  * @property-read Baseline $baseline
  * @property-read User|null $owner
+ * @property-read BaselineItem|null $sourceItem
  * @property-read Collection<int, BaselineAllocation> $allocations
  */
-#[Fillable(['organization_id', 'type', 'position', 'title', 'description', 'clause_reference', 'owner_id', 'value', 'acceptance_criteria', 'baseline_date', 'payment_trigger'])]
+#[Fillable(['organization_id', 'type', 'position', 'title', 'description', 'clause_reference', 'owner_id', 'value', 'acceptance_criteria', 'baseline_date', 'payment_trigger', 'source_item_id'])]
 class BaselineItem extends Model
 {
     /** @use HasFactory<BaselineItemFactory> */
@@ -61,6 +63,21 @@ class BaselineItem extends Model
         static::creating($guard);
         static::updating($guard);
         static::deleting($guard);
+
+        /*
+         * Without this, the DB cascade would silently drop work mappings —
+         * no audit trail — and leave existing-scope classifications
+         * orphaned: unmapped work the triage inbox would never surface
+         * again. Unlinking through the model keeps the removal audited and
+         * resets the classification, so the work re-enters drift (FA-9).
+         */
+        static::deleting(function (BaselineItem $item): void {
+            WorkItemLink::query()
+                ->where('baseline_item_id', $item->id)
+                ->with('workItem')
+                ->get()
+                ->each(fn (WorkItemLink $link) => $link->workItem->unlink());
+        });
     }
 
     /**
@@ -77,6 +94,18 @@ class BaselineItem extends Model
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'owner_id');
+    }
+
+    /**
+     * The item this one was copied from when its baseline version was
+     * minted — the lineage that lets references held against an older
+     * version rebase onto the current one (FA-6).
+     *
+     * @return BelongsTo<BaselineItem, $this>
+     */
+    public function sourceItem(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'source_item_id');
     }
 
     /**

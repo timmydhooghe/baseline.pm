@@ -12,6 +12,7 @@ use App\Models\ChangeRequestAllocation;
 use App\Models\ChangeRequestResponse;
 use App\Models\Engagement;
 use App\Models\RateCardRole;
+use App\Models\RateCardVersion;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,6 +35,8 @@ class ChangeRequestController extends Controller
         if (! $user instanceof User) {
             abort(403);
         }
+
+        $viewCommercials = $user->can('viewAny', RateCardVersion::class);
 
         $changeRequests = $engagement->changeRequests()
             ->with(['workItem', 'mintedBaseline'])
@@ -66,7 +69,7 @@ class ChangeRequestController extends Controller
                     'workItemKey' => $changeRequest->workItem?->external_key,
                 ])
                 ->values(),
-            'position' => $engagement->positionSummary(),
+            'position' => $engagement->positionSummary($viewCommercials),
             'can' => [
                 'create' => $user->can('create', [ChangeRequest::class, $engagement]),
             ],
@@ -115,8 +118,16 @@ class ChangeRequestController extends Controller
         $engagement = $changeRequest->engagement;
         $approvedBaseline = $engagement->approvedBaseline();
 
+        /*
+         * Cost, rates and margin follow the rate card policy (like the
+         * baseline and triage pages): roles without it get the change
+         * request with every commercial field structurally absent. The
+         * customer price stays — the portal shows it to the customer anyway.
+         */
+        $viewCommercials = $user->can('viewAny', RateCardVersion::class);
+
         $rateCardVersionId = $changeRequest->rate_card_version_id ?? $approvedBaseline?->rate_card_version_id;
-        $roles = $rateCardVersionId === null
+        $roles = ! $viewCommercials || $rateCardVersionId === null
             ? collect()
             : RateCardRole::query()->where('rate_card_version_id', $rateCardVersionId)->orderBy('position')->get();
 
@@ -131,15 +142,15 @@ class ChangeRequestController extends Controller
                         'rateCardRoleId' => $allocation->rate_card_role_id,
                         'roleName' => $allocation->role->name,
                         'days' => $allocation->days,
-                        'costPerDay' => $allocation->role->cost_per_day->toArray(),
-                        'cost' => $allocation->cost()->toArray(),
+                        'costPerDay' => $viewCommercials ? $allocation->role->cost_per_day->toArray() : null,
+                        'cost' => $viewCommercials ? $allocation->cost()->toArray() : null,
                     ])
                     ->values(),
                 'affectedItemIds' => $changeRequest->affectedItems->pluck('id')->values(),
-                'cost' => $changeRequest->allocations->isEmpty() ? null : $changeRequest->cost()->toArray(),
-                'suggestedPrice' => $changeRequest->suggestedPrice()?->toArray(),
-                'margin' => $changeRequest->margin()?->toArray(),
-                'marginPercent' => $changeRequest->marginPercent(),
+                'cost' => ! $viewCommercials || $changeRequest->allocations->isEmpty() ? null : $changeRequest->cost()->toArray(),
+                'suggestedPrice' => $viewCommercials ? $changeRequest->suggestedPrice()?->toArray() : null,
+                'margin' => $viewCommercials ? $changeRequest->margin()?->toArray() : null,
+                'marginPercent' => $viewCommercials ? $changeRequest->marginPercent() : null,
             ],
             'roles' => $roles
                 ->map(fn (RateCardRole $role): array => [
@@ -175,9 +186,10 @@ class ChangeRequestController extends Controller
                 'statusLabel' => $engagement->status->label(),
             ],
             'baselineVersion' => $approvedBaseline?->version,
-            'position' => $engagement->positionSummary(),
+            'position' => $engagement->positionSummary($viewCommercials),
             'can' => [
                 'update' => $canUpdate,
+                'viewCommercials' => $viewCommercials,
                 'startAssessment' => $canUpdate && $changeRequest->status->canTransitionTo(ChangeRequestStatus::UnderAssessment),
                 'moveToProposal' => $canUpdate && $changeRequest->status->canTransitionTo(ChangeRequestStatus::CustomerProposal),
                 'submit' => $canUpdate && $changeRequest->status->canTransitionTo(ChangeRequestStatus::AwaitingApproval),

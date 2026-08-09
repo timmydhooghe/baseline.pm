@@ -2,11 +2,14 @@
 
 namespace App\Providers;
 
+use App\ValueObjects\PageMetadata;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\View\View as ViewInstance;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -36,6 +39,10 @@ class AppServiceProvider extends ServiceProvider
         DB::prohibitDestructiveCommands(
             app()->isProduction(),
         );
+
+        View::composer('app', fn (ViewInstance $view) => $view->with(
+            'seo', PageMetadata::forCurrentRequest(),
+        ));
 
         Password::defaults(fn (): ?Password => app()->isProduction()
             ? Password::min(12)

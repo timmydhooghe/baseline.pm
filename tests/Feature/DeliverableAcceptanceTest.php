@@ -430,7 +430,7 @@ test('acceptance records an immutable response, freezes the signed value and acc
         ->and(fn () => $record->recordResponse($approver, AcceptanceDecision::Rejected))
         ->toThrow(ValidationException::class);
 
-    $position = $engagement->positionSummary();
+    $position = $engagement->positionSummary(withCommercials: true);
 
     expect($position['accepted']['value']['amount'])->toBe(1200000)
         ->and($position['accepted']['count'])->toBe(1)

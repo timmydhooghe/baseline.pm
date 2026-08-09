@@ -235,6 +235,29 @@ class ChangeRequest extends Model
                 ]);
             }
 
+            /*
+             * The role mix was required to enter the proposal stage, but it
+             * stays editable there — without this recheck a cleared mix
+             * could freeze a proposal whose approval would mint a deliverable
+             * with no cost budget.
+             */
+            if ($this->allocations->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'allocations' => __('Assess the effort as a role mix first — commercial terms derive from it.'),
+                ]);
+            }
+
+            /*
+             * A frozen proposal can only be reopened by the customer, so
+             * submitting with nobody able to decide would strand it in
+             * awaiting-approval forever.
+             */
+            if ($this->approvers()->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'approvers' => __('The customer has no stakeholder with approval rights — add an approver before submitting.'),
+                ]);
+            }
+
             if ($respondBy->isPast()) {
                 throw ValidationException::withMessages([
                     'respond_by' => __('The respond-by deadline must lie in the future.'),
@@ -536,12 +559,13 @@ class ChangeRequest extends Model
         $next->rate_card_version_id = $this->rate_card_version_id ?? $current->rate_card_version_id;
         $next->save();
 
+        $impactedItemId = $this->resolveImpactMilestoneId($current);
         $itemMap = [];
 
         foreach ($current->items as $item) {
             $baselineDate = $item->baseline_date;
 
-            if ($item->id === $this->impact_milestone_id && $baselineDate !== null && $this->impact_days !== null) {
+            if ($item->id === $impactedItemId && $baselineDate !== null && $this->impact_days !== null) {
                 $baselineDate = $baselineDate->copy()->addDays($this->impact_days);
             }
 
@@ -557,6 +581,7 @@ class ChangeRequest extends Model
                 'acceptance_criteria' => $item->acceptance_criteria,
                 'baseline_date' => $baselineDate,
                 'payment_trigger' => $item->payment_trigger,
+                'source_item_id' => $item->id,
             ]);
 
             $itemMap[$item->id] = $copy->id;
@@ -616,6 +641,11 @@ class ChangeRequest extends Model
             'change_request_id' => $this->id,
             'change_request' => $this->title,
             'contract_value' => $next->contract_value->format(),
+            'schedule_impact' => $this->impact_milestone_id === null ? null : [
+                'milestone' => $impactedItemId === null ? null : $current->items->firstWhere('id', $impactedItemId)?->title,
+                'days' => $this->impact_days,
+                'applied' => $impactedItemId !== null && $this->impact_days !== null,
+            ],
         ]);
 
         /*
@@ -623,11 +653,43 @@ class ChangeRequest extends Model
          * work item to the deliverable the approval created, so the drift
          * loop closes on the ledger too.
          */
-        if ($this->workItem !== null && $this->workItem->link === null) {
-            $this->workItem->linkTo($deliverable);
-        }
+        $this->workItem?->absorbIntoApprovedScope($deliverable);
 
         return $next;
+    }
+
+    /**
+     * Resolve the assessed schedule impact onto the baseline being copied.
+     * The assessment references a milestone on the version that was current
+     * back then — another change request approved in the meantime may have
+     * minted newer versions since. Copies carry source-item lineage, so the
+     * reference is rebased by walking each current item's ancestry back to
+     * the assessed milestone. The impact itself is a day count, so shifts
+     * from concurrently approved changes compose instead of clashing.
+     */
+    private function resolveImpactMilestoneId(Baseline $current): ?string
+    {
+        if ($this->impact_milestone_id === null) {
+            return null;
+        }
+
+        if ($current->items->contains('id', $this->impact_milestone_id)) {
+            return $this->impact_milestone_id;
+        }
+
+        foreach ($current->items as $item) {
+            $ancestor = $item->sourceItem;
+
+            while ($ancestor !== null) {
+                if ($ancestor->id === $this->impact_milestone_id) {
+                    return $item->id;
+                }
+
+                $ancestor = $ancestor->sourceItem;
+            }
+        }
+
+        return null;
     }
 
     protected function applyApproval(Stakeholder $stakeholder, ?string $comment): void

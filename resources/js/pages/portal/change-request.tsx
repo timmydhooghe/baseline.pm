@@ -22,6 +22,7 @@ type Props = {
     };
     stakeholder: { name: string };
     responses: ChangeRequestResponseView[];
+    superseded: boolean;
     canRespond: boolean;
     respondUrl: string;
 };
@@ -51,6 +52,7 @@ export default function PortalChangeRequest({
     changeRequest,
     stakeholder,
     responses,
+    superseded,
     canRespond,
     respondUrl,
 }: Props) {
@@ -64,6 +66,16 @@ export default function PortalChangeRequest({
                 title={details.title}
                 intro={`Reviewing as ${stakeholder.name}. This proposal is frozen — your response is recorded immutably against exactly what you see here.`}
             >
+                {superseded && (
+                    <div
+                        className="border-[1.5px] border-ochre px-4 py-3 font-plex-mono text-[12px] font-semibold text-ochre uppercase"
+                        data-test="superseded-banner"
+                    >
+                        This proposal has been revised since this link was sent
+                        — it stays here for your records, but the decision
+                        happens on the latest version in your inbox.
+                    </div>
+                )}
                 {changeRequest.status === 'approved' && (
                     <div className="border-[1.5px] border-moss px-4 py-3 font-plex-mono text-[12px] font-semibold text-moss uppercase">
                         Approved {changeRequest.decidedAt} — the change is part

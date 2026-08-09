@@ -12,6 +12,7 @@ use App\Models\DeliverableEvidence;
 use App\Models\DeliverableResponse;
 use App\Models\DeliverableVersion;
 use App\Models\Engagement;
+use App\Models\RateCardVersion;
 use App\Models\User;
 use App\Models\WorkItem;
 use Illuminate\Http\RedirectResponse;
@@ -93,7 +94,7 @@ class DeliverableController extends Controller
                 'total' => $deliverables->count(),
                 'value' => $engagement->acceptedValue()->toArray(),
             ],
-            'position' => $engagement->positionSummary(),
+            'position' => $engagement->positionSummary($request->user()?->can('viewAny', RateCardVersion::class) ?? false),
         ]);
     }
 
@@ -205,7 +206,7 @@ class DeliverableController extends Controller
                 'id' => $engagement->id,
                 'name' => $engagement->name,
             ],
-            'position' => $engagement->positionSummary(),
+            'position' => $engagement->positionSummary($request->user()?->can('viewAny', RateCardVersion::class) ?? false),
             'can' => [
                 'update' => ($user instanceof User && $user->can('update', $deliverable))
                     && $deliverable->status->acceptsUpdates(),

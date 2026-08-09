@@ -18,7 +18,7 @@ export default function AuthSplitLayout({
                         href={home()}
                         className="inline-block animate-rise-in font-display text-[20px] font-bold tracking-[-.01em] text-ink"
                     >
-                        BASELINE
+                        BASELINE<span className="text-rust">.</span>
                     </Link>
 
                     <div className="mt-5.5 animate-rise-in border-2 border-ink bg-white px-7.5 py-7 shadow-[8px_8px_0_var(--color-ink)] [animation-delay:.08s]">

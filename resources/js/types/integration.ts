@@ -131,6 +131,8 @@ export type TriagedItemView = {
 };
 
 export type TriagePricingView = {
+    /** Whether the viewer may see commercial figures (rate card policy). */
+    visible: boolean;
     available: boolean;
     baselineVersion: number | null;
     rateCardVersion: number | null;

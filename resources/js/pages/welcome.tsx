@@ -8,12 +8,12 @@ const btn =
     'inline-block cursor-pointer rounded-[3px] text-center font-bold transition-all duration-[180ms]';
 const btnDark = `${btn} bg-ink text-paper hover:bg-rust`;
 const btnOutline = `${btn} border-[1.5px] border-ink`;
-const ctaSize = 'px-6.5 py-3.5 text-[14px]';
+const ctaSize = 'px-5 py-3.5 text-[13px] sm:px-6.5 sm:text-[14px]';
 const lift =
     'transition-[translate,box-shadow] duration-200 hover:-translate-x-[3px] hover:-translate-y-[3px] hover:shadow-[6px_6px_0_var(--color-ink)]';
 const kicker = 'font-plex-mono text-[12px] font-semibold';
 const sectionTitle =
-    'mt-2.5 font-display text-[38px] font-bold tracking-[-.02em]';
+    'mt-2.5 font-display text-[30px] font-bold tracking-[-.02em] sm:text-[38px]';
 const cardLabel = 'font-plex-mono text-[11px] font-semibold text-stone';
 const cardTitle = 'mt-2 font-display text-[19px] font-bold';
 const highlight = 'bg-sun px-[5px]';
@@ -96,23 +96,23 @@ function TourModal({
             aria-label="Baseline 2-minute tour"
             onClick={onClose}
             className={cn(
-                'fixed inset-0 z-[100] flex items-center justify-center bg-ink/82 p-10',
+                'fixed inset-0 z-[100] flex items-center justify-center bg-ink/82 p-3 sm:p-10',
                 closing ? 'animate-overlay-out' : 'animate-overlay-in',
             )}
         >
             <div
                 onClick={(event) => event.stopPropagation()}
                 className={cn(
-                    'relative w-[min(920px,100%)] border-2 border-ink bg-ink shadow-[12px_12px_0_var(--color-rust)]',
+                    'relative w-[min(920px,100%)] border-2 border-ink bg-ink shadow-[6px_6px_0_var(--color-rust)] sm:shadow-[12px_12px_0_var(--color-rust)]',
                     closing ? 'animate-modal-out' : 'animate-modal-in',
                 )}
             >
-                <div className="flex items-center gap-2.5 border-b-2 border-ink bg-paper px-4 py-3">
+                <div className="flex items-center gap-2.5 border-b-2 border-ink bg-paper px-3 py-2.5 sm:px-4 sm:py-3">
                     <span className="font-plex-mono text-[11.5px] font-semibold text-ink">
-                        BASELINE — 2-MIN TOUR
+                        BASELINE · 2-MIN TOUR
                     </span>
-                    <span className="font-plex-mono text-[10.5px] text-stone">
-                        placeholder footage — final cut in production
+                    <span className="hidden font-plex-mono text-[10.5px] text-stone sm:inline">
+                        placeholder footage · final cut in production
                     </span>
                     <button
                         type="button"
@@ -137,10 +137,10 @@ function TourModal({
 
 function PositionCard() {
     return (
-        <div className="w-[340px] flex-none animate-rise-in border-2 border-ink bg-white px-6.5 py-6 shadow-[8px_8px_0_var(--color-ink)] [animation-delay:.25s] [animation-duration:.7s]">
+        <div className="w-full max-w-[380px] flex-none animate-rise-in border-2 border-ink bg-white px-5 py-5 shadow-[6px_6px_0_var(--color-ink)] [animation-delay:.25s] [animation-duration:.7s] sm:px-6.5 sm:py-6 sm:shadow-[8px_8px_0_var(--color-ink)] lg:w-[340px]">
             <div className="flex items-baseline">
                 <div className="text-[11px] font-bold tracking-[.08em] text-stone">
-                    THE POSITION — LIVE
+                    THE POSITION · LIVE
                 </div>
                 <div className="ml-auto font-plex-mono text-[10px] text-moss">
                     <span className="animate-pulse-dot">●</span> SYNCED 4 MIN
@@ -192,19 +192,11 @@ const navLinks = [
     { href: '#manifesto', label: 'MANIFESTO' },
 ];
 
-const customers = [
-    'NORTHBOUND',
-    'HELIX DIGITAL',
-    'STUDIO K',
-    'PORTA',
-    'FIELDWORK',
-    'MOLENAAR&CO',
-];
-
-const heroStats = [
-    { value: '6.2pts', label: 'margin recovered avg.' },
-    { value: '11 days', label: 'faster CR sign-off' },
-    { value: '0', label: 'invoice disputes' },
+const bannerStatements = [
+    'MORE PROFIT',
+    'CONTROLLED SCOPE',
+    'FASTER APPROVALS',
+    'FEWER DISPUTES',
 ];
 
 const problems = [
@@ -212,24 +204,26 @@ const problems = [
         stat: '€9,200 gone',
         statColor: 'text-rust',
         title: 'Scope creep is invisible until invoice time',
-        body: '"Small favours" land in the sprint without a contract line. Nobody decided to do them for free — nobody decided at all.',
-        cellClass: 'border-r border-sand-400 py-6 pr-7.5',
+        body: '"Small favours" land in the sprint without a contract line. Nobody decided to do them for free. Nobody decided at all.',
+        cellClass:
+            'border-b border-sand-400 py-6 md:border-r md:border-b-0 md:pr-7.5',
         delay: 0,
     },
     {
         stat: '4 days, no answer',
         statColor: 'text-ochre',
         title: 'Change requests die in email threads',
-        body: 'The approval sits unanswered — but the work starts anyway. When the invoice lands, the client remembers a conversation, not an agreement.',
-        cellClass: 'border-r border-sand-400 px-7.5 py-6',
+        body: 'The approval sits unanswered, but the work starts anyway. When the invoice lands, the client remembers a conversation, not an agreement.',
+        cellClass:
+            'border-b border-sand-400 py-6 md:border-r md:border-b-0 md:px-7.5',
         delay: 0.08,
     },
     {
         stat: '11 days late',
         statColor: 'text-rust',
         title: 'Client delays become your penalty',
-        body: 'Their late test data, your late milestone. Without day-by-day attribution, you eat the slip — or fight about it.',
-        cellClass: 'py-6 pl-7.5',
+        body: 'Their late test data, your late milestone. Without day-by-day attribution, you absorb the slip or fight about it.',
+        cellClass: 'py-6 md:pl-7.5',
         delay: 0.16,
     },
 ];
@@ -270,27 +264,18 @@ export default function Welcome() {
 
     return (
         <>
-            <Head title="Fixed price. Not fixed losses.">
-                <link rel="preconnect" href="https://fonts.bunny.net" />
-                <link
-                    rel="stylesheet"
-                    href="https://fonts.bunny.net/css?family=ibm-plex-mono:400,500,600|onest:400,600,700|space-grotesk:700&display=swap"
-                />
-                <meta
-                    name="description"
-                    content="Baseline shows agencies their commercial position on fixed-price work every morning — scope creep priced, change requests signed, delays attributed."
-                />
-            </Head>
-            <div className="min-h-screen min-w-[1100px] bg-paper font-onest text-ink selection:bg-sun">
-                <header className="sticky top-0 z-10 flex items-center gap-[26px] border-b-2 border-ink bg-paper px-14 py-5">
-                    <div className="font-display text-[18px] font-bold tracking-[-.01em]">
-                        BASELINE
+            {/* Description, Open Graph and schema.org are server rendered from config/seo.php: crawlers never run the head manager. */}
+            <Head title="Fixed price. Not fixed losses." />
+            <div className="min-h-screen overflow-x-hidden bg-paper font-onest text-ink selection:bg-sun">
+                <header className="sticky top-0 z-10 flex items-center gap-3 border-b-2 border-ink bg-paper px-4 py-3.5 sm:px-6 sm:py-4 lg:gap-[26px] lg:px-14 lg:py-5">
+                    <div className="flex-none font-display text-[18px] font-bold tracking-[-.01em]">
+                        BASELINE<span className="text-rust">.</span>
                     </div>
                     {navLinks.map((link) => (
                         <a
                             key={link.label}
                             href={link.href}
-                            className="text-[12.5px] font-semibold text-stone transition-colors duration-150 hover:text-rust"
+                            className="hidden text-[12.5px] font-semibold text-stone transition-colors duration-150 hover:text-rust lg:block"
                         >
                             {link.label}
                         </a>
@@ -311,7 +296,7 @@ export default function Welcome() {
                                 href={login()}
                                 className={cn(
                                     btnOutline,
-                                    'ml-auto px-4 py-2 text-[12.5px] hover:bg-ink hover:text-paper',
+                                    'ml-auto hidden px-4 py-2 text-[12.5px] hover:bg-ink hover:text-paper sm:inline-block',
                                 )}
                             >
                                 SIGN IN
@@ -320,7 +305,7 @@ export default function Welcome() {
                                 href={login()}
                                 className={cn(
                                     btnDark,
-                                    'px-[17px] py-[9px] text-[12.5px]',
+                                    'ml-auto px-3 py-[9px] text-[11.5px] sm:ml-0 sm:px-[17px] sm:text-[12.5px]',
                                 )}
                             >
                                 GET BASELINE →
@@ -329,27 +314,29 @@ export default function Welcome() {
                     )}
                 </header>
 
-                <section className="mx-auto flex max-w-[1200px] items-center gap-14 px-14 pt-19 pb-16">
-                    <div className="flex-[1.4]">
-                        <h1 className="animate-rise-in font-display text-[64px] leading-none font-bold tracking-[-.03em]">
+                <section className="mx-auto flex max-w-[1200px] flex-col items-center gap-10 px-4 pt-12 pb-13 sm:px-6 sm:pt-16 sm:pb-16 lg:flex-row lg:gap-14 lg:px-14 lg:pt-19">
+                    <div className="w-full lg:flex-[1.4]">
+                        <h1 className="animate-rise-in font-display text-[44px] leading-none font-bold tracking-[-.03em] sm:text-[56px] lg:text-[64px]">
                             Fixed price.
                             <br />
                             Not fixed{' '}
                             <span className="bg-sun px-2">losses</span>.
                         </h1>
-                        <p className="mt-5.5 max-w-[460px] animate-rise-in text-[16.5px] leading-[1.65] text-pretty text-stone [animation-delay:.1s]">
-                            Agencies lose 4–9 margin points per fixed-price
-                            project to unlogged scope, unsigned changes and
-                            unattributed delays. Baseline shows your commercial
-                            position every morning — and the three moves that
-                            protect it.
+                        <p className="mt-5 max-w-[540px] animate-rise-in text-[15.5px] leading-[1.65] text-pretty text-stone [animation-delay:.1s] sm:mt-5.5 sm:text-[16.5px]">
+                            Your delivery tools track the work. Baseline tracks
+                            the agreement: scope, changes, approvals, delays,
+                            and every commercial decision between them.
                         </p>
-                        <div className="mt-7.5 flex animate-rise-in gap-3 [animation-delay:.18s]">
+                        <div className="mt-7.5 flex animate-rise-in flex-col gap-3 [animation-delay:.18s] sm:flex-row">
                             <Link
                                 href={login()}
-                                className={cn(btnDark, ctaSize)}
+                                className={cn(
+                                    btnDark,
+                                    ctaSize,
+                                    'w-full sm:w-auto',
+                                )}
                             >
-                                SEE YOUR POSITION →
+                                PROTECT YOUR MARGIN →
                             </Link>
                             <button
                                 type="button"
@@ -357,22 +344,11 @@ export default function Welcome() {
                                 className={cn(
                                     btnOutline,
                                     ctaSize,
-                                    'hover:bg-white',
+                                    'w-full hover:bg-white sm:w-auto',
                                 )}
                             >
                                 2-MIN TOUR
                             </button>
-                        </div>
-                        <div className="mt-9 flex animate-rise-in gap-8.5 font-plex-mono text-[11.5px] text-stone [animation-delay:.28s]">
-                            {heroStats.map((stat) => (
-                                <span key={stat.label}>
-                                    <b className="text-[19px] text-ink">
-                                        {stat.value}
-                                    </b>
-                                    <br />
-                                    {stat.label}
-                                </span>
-                            ))}
                         </div>
                     </div>
                     <PositionCard />
@@ -385,29 +361,27 @@ export default function Welcome() {
                     />
                 )}
 
-                <div className="flex items-center gap-10 overflow-hidden border-t-2 border-ink bg-ink px-14 py-3.5 text-[11.5px] text-paper">
-                    <span className="flex-none font-bold text-ash">
-                        RUNNING ON BASELINE
-                    </span>
-                    {customers.map((customer) => (
+                <div className="grid grid-cols-1 overflow-hidden border-t-2 border-ink bg-ink px-4 text-paper sm:px-6 md:grid-cols-2 md:py-3 lg:grid-cols-4 lg:px-14 lg:py-5">
+                    {bannerStatements.map((statement) => (
                         <span
-                            key={customer}
-                            className="font-display font-bold opacity-70 transition-opacity duration-200 hover:opacity-100"
+                            key={statement}
+                            className="flex items-center justify-center gap-3 border-t border-soot py-4 font-display text-[18px] font-bold tracking-[-.01em] first:border-t-0 md:border-l md:py-3 md:first:border-l-0 md:nth-2:border-t-0 md:nth-3:border-l-0 lg:border-t-0 lg:py-0 lg:text-[20px] lg:nth-3:border-l"
                         >
-                            {customer}
+                            <span
+                                aria-hidden="true"
+                                className="size-2.5 shrink-0 rounded-full bg-moss"
+                            />
+                            <span>{statement}</span>
                         </span>
                     ))}
-                    <span className="ml-auto flex-none font-plex-mono text-ash">
-                        120+ DELIVERY TEAMS
-                    </span>
                 </div>
 
                 <section
                     id="position"
-                    className="mx-auto max-w-[1200px] px-14 pt-19 pb-7.5"
+                    className="mx-auto max-w-[1200px] px-4 pt-14 pb-6 sm:px-6 sm:pt-16 lg:px-14 lg:pt-19 lg:pb-7.5"
                 >
                     <div className={cn(kicker, 'text-rust')}>
-                        01 — THE PROBLEM
+                        01 · THE PROBLEM
                     </div>
                     <Reveal
                         className={cn(
@@ -416,10 +390,10 @@ export default function Welcome() {
                         )}
                     >
                         Your Jira knows what's happening.
-                        <br />
-                        Your contract doesn't.
+                        <br className="hidden sm:block" /> Your contract
+                        doesn't.
                     </Reveal>
-                    <div className="mt-9 grid grid-cols-3 border-t-2 border-ink">
+                    <div className="mt-7 grid grid-cols-1 border-t-2 border-ink sm:mt-9 md:grid-cols-3">
                         {problems.map((problem) => (
                             <Reveal
                                 key={problem.title}
@@ -447,10 +421,10 @@ export default function Welcome() {
 
                 <section
                     id="how"
-                    className="mx-auto max-w-[1200px] px-14 py-15"
+                    className="mx-auto max-w-[1200px] px-4 py-12 sm:px-6 sm:py-14 lg:px-14 lg:py-15"
                 >
                     <div className={cn(kicker, 'text-moss')}>
-                        02 — THE MOVES
+                        02 · THE MOVES
                     </div>
                     <Reveal className={cn(sectionTitle, 'leading-[1.1]')}>
                         Three moves, every morning.
@@ -459,11 +433,11 @@ export default function Welcome() {
                         <Reveal>
                             <div
                                 className={cn(
-                                    'flex items-stretch gap-9 border-2 border-ink bg-white',
+                                    'flex flex-col border-2 border-ink bg-white lg:flex-row lg:items-stretch lg:gap-9',
                                     lift,
                                 )}
                             >
-                                <div className="flex-1 py-7 pl-8">
+                                <div className="flex-1 p-5 sm:p-7 lg:py-7 lg:pr-0 lg:pl-8">
                                     <div className="font-display text-[20px] font-bold">
                                         <span className={highlight}>
                                             CATCH SCOPE CREEP
@@ -473,8 +447,8 @@ export default function Welcome() {
                                     <div className="mt-2.5 max-w-[400px] text-[13.5px] leading-[1.65] text-pretty text-stone">
                                         Every Jira and Linear issue is matched
                                         against your approved scope. Anything
-                                        unlinked shows up priced in euros — not
-                                        story points — with four ways out:
+                                        unlinked shows up priced in euros, not
+                                        story points, with four ways out:
                                         in-scope, change request, operational,
                                         dismiss. Each classification is on the
                                         record.
@@ -483,8 +457,8 @@ export default function Welcome() {
                                         WORKS WITH JIRA · LINEAR · STANDALONE
                                     </div>
                                 </div>
-                                <div className="grid w-[360px] flex-none content-center gap-1.5 border-l-2 border-ink bg-paper p-5">
-                                    <div className="flex items-baseline gap-2.5 border-[1.5px] border-ink bg-white px-3.5 py-2.5 text-[12px]">
+                                <div className="grid w-full flex-none content-center gap-1.5 border-t-2 border-ink bg-paper p-4 sm:p-5 lg:w-[360px] lg:border-t-0 lg:border-l-2">
+                                    <div className="flex flex-wrap items-baseline gap-2.5 border-[1.5px] border-ink bg-white px-3.5 py-2.5 text-[12px]">
                                         <span className="font-plex-mono font-semibold text-rust">
                                             CREEP
                                         </span>
@@ -493,7 +467,7 @@ export default function Welcome() {
                                             €4,700
                                         </span>
                                     </div>
-                                    <div className="flex items-baseline gap-2.5 border-[1.5px] border-ink bg-white px-3.5 py-2.5 text-[12px]">
+                                    <div className="flex flex-wrap items-baseline gap-2.5 border-[1.5px] border-ink bg-white px-3.5 py-2.5 text-[12px]">
                                         <span className="font-plex-mono font-semibold text-rust">
                                             CREEP
                                         </span>
@@ -502,7 +476,7 @@ export default function Welcome() {
                                             €2,000
                                         </span>
                                     </div>
-                                    <div className="mt-1 flex gap-1.5 text-[10.5px] font-bold">
+                                    <div className="mt-1 flex flex-wrap gap-1.5 text-[10.5px] font-bold">
                                         <span className="border-[1.5px] border-ink bg-white px-2 py-[3px]">
                                             IN-SCOPE
                                         </span>
@@ -522,11 +496,11 @@ export default function Welcome() {
                         <Reveal>
                             <div
                                 className={cn(
-                                    'flex items-stretch gap-9 border-2 border-ink bg-white',
+                                    'flex flex-col border-2 border-ink bg-white lg:flex-row lg:items-stretch lg:gap-9',
                                     lift,
                                 )}
                             >
-                                <div className="grid w-[360px] flex-none content-center gap-2 border-r-2 border-ink bg-paper p-5">
+                                <div className="order-2 grid w-full flex-none content-center gap-2 border-t-2 border-ink bg-paper p-4 sm:p-5 lg:order-1 lg:w-[360px] lg:border-t-0 lg:border-r-2">
                                     <div className="border-[1.5px] border-ink bg-white px-3.5 py-3 text-[12px]">
                                         <div className="flex items-baseline gap-2">
                                             <b>CR-07 Multi-depot</b>
@@ -538,7 +512,7 @@ export default function Welcome() {
                                             respond by Wed 5 Aug · trade-offs:
                                             swap / defer
                                         </div>
-                                        <div className="mt-2 flex gap-1.5 text-[10.5px] font-bold">
+                                        <div className="mt-2 flex flex-wrap gap-1.5 text-[10.5px] font-bold">
                                             <span className="bg-moss px-2.5 py-1 text-white">
                                                 APPROVE
                                             </span>
@@ -555,7 +529,7 @@ export default function Welcome() {
                                         v4 CREATED
                                     </div>
                                 </div>
-                                <div className="flex-1 py-7 pr-8">
+                                <div className="order-1 flex-1 p-5 sm:p-7 lg:order-2 lg:py-7 lg:pr-8 lg:pl-0">
                                     <div className="font-display text-[20px] font-bold">
                                         <span className={highlight}>
                                             GET CHANGES SIGNED
@@ -566,13 +540,12 @@ export default function Welcome() {
                                         Change orders carry price, timeline
                                         impact, trade-off alternatives and a
                                         response deadline. Your client approves
-                                        in their own portal — one click,
-                                        identity verified, immutable. Approval
-                                        creates a new baseline version
-                                        automatically.
+                                        in their own portal: one click, identity
+                                        verified, immutable. Approval creates a
+                                        new baseline version automatically.
                                     </div>
                                     <div className="mt-3 font-plex-mono text-[11px] text-stone">
-                                        NO WORK BEFORE APPROVAL — BREACHES GET
+                                        NO WORK BEFORE APPROVAL · BREACHES GET
                                         FLAGGED
                                     </div>
                                 </div>
@@ -581,11 +554,11 @@ export default function Welcome() {
                         <Reveal>
                             <div
                                 className={cn(
-                                    'flex items-stretch gap-9 border-2 border-ink bg-white',
+                                    'flex flex-col border-2 border-ink bg-white lg:flex-row lg:items-stretch lg:gap-9',
                                     lift,
                                 )}
                             >
-                                <div className="flex-1 py-7 pl-8">
+                                <div className="flex-1 p-5 sm:p-7 lg:py-7 lg:pr-0 lg:pl-8">
                                     <div className="font-display text-[20px] font-bold">
                                         <span className={highlight}>
                                             PROVE DELAYS
@@ -596,7 +569,7 @@ export default function Welcome() {
                                         Client-owed dependencies have dates and
                                         owners. When one slips, the milestone
                                         impact is computed day-for-day and the
-                                        attribution is recorded — acknowledged
+                                        attribution is recorded and acknowledged
                                         by the client at the time, not argued
                                         about at the end.
                                     </div>
@@ -604,7 +577,7 @@ export default function Welcome() {
                                         EVERY REPORT LINKS TO ITS EVIDENCE
                                     </div>
                                 </div>
-                                <div className="grid w-[360px] flex-none content-center border-l-2 border-ink bg-paper p-5 font-plex-mono text-[11.5px]">
+                                <div className="grid w-full flex-none content-center border-t-2 border-ink bg-paper p-4 font-plex-mono text-[11px] sm:p-5 sm:text-[11.5px] lg:w-[360px] lg:border-t-0 lg:border-l-2">
                                     <div className="flex border-b border-sand-400 py-[7px]">
                                         <span>DEP-3 test data</span>
                                         <span className="ml-auto text-rust">
@@ -635,16 +608,16 @@ export default function Welcome() {
                     </div>
                 </section>
 
-                <section className="bg-ink px-14 py-16 text-paper">
+                <section className="bg-ink px-4 py-14 text-paper sm:px-6 sm:py-16 lg:px-14">
                     <div className="mx-auto max-w-[1200px]">
                         <div className={cn(kicker, 'text-sun')}>
-                            03 — THE OTHER SIDE
+                            03 · THE OTHER SIDE
                         </div>
-                        <div className="mt-2.5 flex items-center gap-14">
+                        <div className="mt-2.5 flex flex-col items-stretch gap-10 lg:flex-row lg:items-center lg:gap-14">
                             <Reveal className="flex-1">
-                                <div className="font-display text-[38px] leading-[1.1] font-bold tracking-[-.02em]">
+                                <div className="font-display text-[30px] leading-[1.1] font-bold tracking-[-.02em] sm:text-[38px]">
                                     Your client sees the same numbers.
-                                    <br />
+                                    <br className="hidden sm:block" />{' '}
                                     <span className="text-ash">
                                         No discussions.
                                     </span>
@@ -652,11 +625,11 @@ export default function Welcome() {
                                 <div className="mt-4 max-w-[440px] text-[14.5px] leading-[1.65] text-pretty text-fog">
                                     The client portal shows commitments,
                                     milestones, decisions and their own overdue
-                                    actions — never your margin. When both sides
+                                    actions, never your margin. When both sides
                                     watch the same ledger all along, the final
                                     invoice is a formality, not a fight.
                                 </div>
-                                <div className="mt-5.5 flex gap-6.5 text-[12.5px] text-fog">
+                                <div className="mt-5.5 flex flex-col gap-2 text-[12.5px] text-fog sm:flex-row sm:flex-wrap sm:gap-x-6.5 sm:gap-y-2">
                                     <span>✓ approvals in one click</span>
                                     <span>✓ evidence attached</span>
                                     <span>✓ margins never exposed</span>
@@ -664,9 +637,9 @@ export default function Welcome() {
                             </Reveal>
                             <Reveal
                                 delay={0.15}
-                                className="w-[380px] flex-none border-2 border-paper bg-paper px-6 py-5.5 text-ink"
+                                className="w-full max-w-[440px] flex-none self-center border-2 border-paper bg-paper px-4 py-5 text-ink sm:px-6 sm:py-5.5 lg:w-[380px]"
                             >
-                                <div className="flex items-baseline gap-2">
+                                <div className="flex flex-wrap items-baseline gap-2">
                                     <b className="text-[14px]">
                                         Your project with Northbound
                                     </b>
@@ -686,11 +659,11 @@ export default function Welcome() {
                                     </b>
                                     <div className="mt-1.5 grid gap-1">
                                         <span>
-                                            1. Provide carrier test data —{' '}
+                                            1. Provide carrier test data ·{' '}
                                             <b>11 days overdue</b>
                                         </span>
                                         <span>
-                                            2. Decide CR-07 (€18,400) — by
+                                            2. Decide CR-07 (€18,400) · by
                                             Wednesday
                                         </span>
                                     </div>
@@ -706,16 +679,16 @@ export default function Welcome() {
 
                 <section
                     id="toolkit"
-                    className="mx-auto max-w-[1200px] px-14 pt-19 pb-7.5"
+                    className="mx-auto max-w-[1200px] px-4 pt-14 pb-6 sm:px-6 sm:pt-16 lg:px-14 lg:pt-19 lg:pb-7.5"
                 >
                     <div className={cn(kicker, 'text-rust')}>
-                        04 — THE RECORD
+                        04 · THE RECORD
                     </div>
                     <Reveal className={cn(sectionTitle, 'leading-[1.1]')}>
                         Everything on the record.
                     </Reveal>
-                    <div className="mt-9 grid grid-cols-4 gap-3">
-                        <Reveal className="col-span-2">
+                    <div className="mt-7 grid grid-cols-1 gap-3 sm:mt-9 md:grid-cols-2 lg:grid-cols-4">
+                        <Reveal className="md:col-span-2">
                             <div
                                 className={cn(
                                     'h-full border-2 border-ink bg-white px-6.5 py-6',
@@ -733,10 +706,10 @@ export default function Welcome() {
                                 </div>
                                 <div className="mt-2 text-[13px] leading-[1.6] text-pretty text-stone">
                                     Scope is versioned like code. Nothing edited
-                                    in place, nothing lost — every euro traces
+                                    in place, nothing lost. Every euro traces
                                     back to the version that authorised it.
                                 </div>
-                                <div className="mt-4 flex items-center gap-2 font-plex-mono text-[11px]">
+                                <div className="mt-4 flex flex-wrap items-center gap-2 font-plex-mono text-[11px]">
                                     <span className="border-[1.5px] border-ink bg-paper px-2.5 py-[5px]">
                                         v1 · €230.6k
                                     </span>
@@ -755,7 +728,7 @@ export default function Welcome() {
                                 </div>
                             </div>
                         </Reveal>
-                        <Reveal delay={0.08} className="col-span-2">
+                        <Reveal delay={0.08} className="md:col-span-2">
                             <div
                                 className={cn(
                                     'h-full border-2 border-ink bg-white px-6.5 py-6',
@@ -869,7 +842,7 @@ export default function Welcome() {
                                 </div>
                             </div>
                         </Reveal>
-                        <Reveal delay={0.12} className="col-span-2">
+                        <Reveal delay={0.12} className="md:col-span-2">
                             <div
                                 className={cn(
                                     'h-full border-2 border-ink bg-ink px-6.5 py-6 text-paper',
@@ -888,7 +861,7 @@ export default function Welcome() {
                                 <div className="mt-2 text-[13px] leading-[1.6] text-pretty text-fog">
                                     One page: what moved, what changed, what's
                                     owed and by whom. Every line links to the
-                                    record behind it — no narrative, no spin.
+                                    record behind it. No narrative, no spin.
                                 </div>
                                 <div className="mt-3 font-plex-mono text-[10.5px] text-ash">
                                     WK 32 REPORT · 14 LINKED RECORDS · SENT TO 6
@@ -896,7 +869,7 @@ export default function Welcome() {
                                 </div>
                             </div>
                         </Reveal>
-                        <Reveal className="col-span-2">
+                        <Reveal className="md:col-span-2">
                             <div
                                 className={cn(
                                     'h-full border-2 border-ink bg-white px-6.5 py-6',
@@ -910,13 +883,13 @@ export default function Welcome() {
                                     Client-owed items with dates and owners
                                 </div>
                                 <div className="mt-3.5 grid font-plex-mono text-[11.5px]">
-                                    <div className="flex border-b border-sand-300 py-1.5">
+                                    <div className="flex flex-wrap gap-2 border-b border-sand-300 py-1.5">
                                         <span>DEP-3 carrier test data</span>
                                         <span className="ml-auto text-rust">
                                             11d LATE
                                         </span>
                                     </div>
-                                    <div className="flex py-1.5">
+                                    <div className="flex flex-wrap gap-2 py-1.5">
                                         <span>DEP-5 depot access list</span>
                                         <span className="ml-auto text-moss">
                                             ON TIME
@@ -925,7 +898,7 @@ export default function Welcome() {
                                 </div>
                             </div>
                         </Reveal>
-                        <Reveal delay={0.08} className="col-span-2">
+                        <Reveal delay={0.08} className="md:col-span-2">
                             <div
                                 className={cn(
                                     'h-full border-2 border-ink bg-white px-6.5 py-6',
@@ -937,10 +910,10 @@ export default function Welcome() {
                                     Meets the work where it lives
                                 </div>
                                 <div className="mt-2 text-[13px] leading-[1.6] text-pretty text-stone">
-                                    Two-way sync with the delivery tool — no
+                                    Two-way sync with the delivery tool. No
                                     double entry, no new board to maintain.
                                 </div>
-                                <div className="mt-3.5 flex gap-2 font-plex-mono text-[10.5px] font-semibold">
+                                <div className="mt-3.5 flex flex-wrap gap-2 font-plex-mono text-[10.5px] font-semibold">
                                     <span className="border-[1.5px] border-ink bg-paper px-2.5 py-1">
                                         JIRA
                                     </span>
@@ -958,17 +931,17 @@ export default function Welcome() {
 
                 <section
                     id="pricing"
-                    className="mx-auto max-w-[1200px] px-14 py-19"
+                    className="mx-auto max-w-[1200px] px-4 py-14 sm:px-6 sm:py-16 lg:px-14 lg:py-19"
                 >
-                    <div className={cn(kicker, 'text-moss')}>05 — PRICING</div>
+                    <div className={cn(kicker, 'text-moss')}>05 · PRICING</div>
                     <Reveal className={sectionTitle}>
                         One recovered change request pays for the year.
                     </Reveal>
                     <Reveal
                         delay={0.1}
-                        className="mt-9 grid grid-cols-3 border-2 border-ink bg-white"
+                        className="mt-7 grid grid-cols-1 border-2 border-ink bg-white sm:mt-9 md:grid-cols-3"
                     >
-                        <div className="border-r border-sand-400 px-8 py-7.5">
+                        <div className="border-b border-sand-400 px-5 py-6 sm:px-8 sm:py-7.5 md:border-r md:border-b-0">
                             <div className={cardLabel}>SOLO</div>
                             <div className="mt-2 font-display text-[34px] font-bold">
                                 €0
@@ -992,7 +965,7 @@ export default function Welcome() {
                                 START FREE
                             </Link>
                         </div>
-                        <div className="relative border-r border-sand-400 bg-ink px-8 py-7.5 text-paper">
+                        <div className="relative border-b border-sand-400 bg-ink px-5 py-6 text-paper sm:px-8 sm:py-7.5 md:border-r md:border-b-0">
                             <div className="absolute -top-0.5 right-4 bg-sun px-2 py-1 font-plex-mono text-[10px] font-semibold text-ink">
                                 MOST AGENCIES
                             </div>
@@ -1027,7 +1000,7 @@ export default function Welcome() {
                                 GET STUDIO →
                             </Link>
                         </div>
-                        <div className="px-8 py-7.5">
+                        <div className="px-5 py-6 sm:px-8 sm:py-7.5">
                             <div className={cardLabel}>FIRM</div>
                             <div className="mt-2 font-display text-[34px] font-bold">
                                 Custom
@@ -1053,23 +1026,22 @@ export default function Welcome() {
                         </div>
                     </Reveal>
                     <div className="mt-3 font-plex-mono text-[11.5px] text-stone">
-                        CLIENT USERS ARE ALWAYS FREE — APPROVERS, VIEWERS,
+                        CLIENT USERS ARE ALWAYS FREE: APPROVERS, VIEWERS,
                         SPONSORS. NO SEAT MATH.
                     </div>
                 </section>
 
                 <section
                     id="manifesto"
-                    className="border-t-2 border-ink bg-white px-14 py-19"
+                    className="border-t-2 border-ink bg-white px-4 py-14 sm:px-6 sm:py-16 lg:px-14 lg:py-19"
                 >
                     <Reveal className="mx-auto max-w-[760px]">
                         <div className={cn(kicker, 'text-rust')}>
-                            06 — MANIFESTO
+                            06 · MANIFESTO
                         </div>
-                        <div className="mt-3.5 font-display text-[30px] leading-[1.25] font-bold tracking-[-.02em]">
+                        <div className="mt-3.5 font-display text-[26px] leading-[1.25] font-bold tracking-[-.02em] sm:text-[30px]">
                             Scope creep isn't a client problem.
-                            <br />
-                            It's a{' '}
+                            <br className="hidden sm:block" /> It's a{' '}
                             <span className="bg-sun px-1.5">
                                 record-keeping
                             </span>{' '}
@@ -1082,27 +1054,31 @@ export default function Welcome() {
                             work lives in a tool the contract has never heard
                             of. Every undocumented favour, every "quick
                             addition", every slipped dependency is a small
-                            silent renegotiation — always in the same direction.
+                            silent renegotiation, always in the same direction.
                         </div>
                         <div className="mt-3.5 text-[15px] leading-[1.75] text-pretty text-soot">
                             Baseline's bet: if keeping the record is effortless,
-                            the record keeps you. Decide who pays for every hour
-                            — deliberately, visibly, at the moment it happens —
-                            and fixed price becomes what it was supposed to be:
-                            a fair deal for both sides.
+                            the record keeps you. Decide who pays for every
+                            hour, deliberately and visibly, at the moment it
+                            happens. Then fixed price becomes what it was
+                            supposed to be: a fair deal for both sides.
                         </div>
-                        <div className="mt-7.5 flex gap-3">
+                        <div className="mt-7.5 flex flex-col gap-3 sm:flex-row">
                             <Link
                                 href={login()}
-                                className={cn(btnDark, ctaSize)}
+                                className={cn(
+                                    btnDark,
+                                    ctaSize,
+                                    'w-full sm:w-auto',
+                                )}
                             >
-                                SEE YOUR POSITION →
+                                PROTECT YOUR MARGIN →
                             </Link>
                             <span
                                 className={cn(
                                     btnOutline,
                                     ctaSize,
-                                    'hover:bg-paper',
+                                    'w-full hover:bg-paper sm:w-auto',
                                 )}
                             >
                                 READ THE FULL MANIFESTO
@@ -1111,10 +1087,10 @@ export default function Welcome() {
                     </Reveal>
                 </section>
 
-                <footer className="flex items-start gap-10 border-t-2 border-ink bg-paper px-14 py-9 text-[12px] text-stone">
-                    <div>
+                <footer className="grid grid-cols-2 gap-8 border-t-2 border-ink bg-paper px-4 py-9 text-[12px] text-stone sm:px-6 md:grid-cols-4 lg:px-14">
+                    <div className="col-span-2 md:col-span-1">
                         <div className="font-display text-[15px] font-bold text-ink">
-                            BASELINE
+                            BASELINE<span className="text-rust">.</span>
                         </div>
                         <div className="mt-1.5 max-w-[220px] leading-[1.5]">
                             Delivery governance for agencies running fixed-price
@@ -1135,7 +1111,7 @@ export default function Welcome() {
                         <span>Security</span>
                         <span>Contact</span>
                     </div>
-                    <div className="ml-auto font-plex-mono text-[11px]">
+                    <div className="col-span-2 font-plex-mono text-[11px] md:col-span-1 md:text-right">
                         © 2026 BASELINE · GDPR · EU-HOSTED
                     </div>
                 </footer>

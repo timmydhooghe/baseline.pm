@@ -6,6 +6,7 @@ use App\Enums\BaselineItemType;
 use App\Enums\EstimateUnit;
 use App\Models\BaselineItem;
 use App\Models\Engagement;
+use App\Models\RateCardVersion;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\ValueObjects\Money;
@@ -34,8 +35,15 @@ class TriageController extends Controller
             abort(403);
         }
 
+        /*
+         * Cost and price derive from the rate card, so they follow the rate
+         * card policy (like the baseline page): viewers without it get the
+         * queue with every commercial field structurally absent.
+         */
+        $viewCommercials = $user->can('viewAny', RateCardVersion::class);
+
         $baseline = $engagement->currentBaseline();
-        $rates = $baseline?->blendedDayRates();
+        $rates = $viewCommercials ? $baseline?->blendedDayRates() : null;
 
         $deliverables = $baseline === null
             ? collect()
@@ -84,6 +92,7 @@ class TriageController extends Controller
                 'daysUntil' => $nearestMilestone->baseline_date === null ? null : (int) round(today()->diffInDays($nearestMilestone->baseline_date)),
             ],
             'pricing' => [
+                'visible' => $viewCommercials,
                 'available' => $rates !== null,
                 'baselineVersion' => $baseline?->version,
                 'rateCardVersion' => $baseline?->rateCardVersion?->version,
@@ -91,7 +100,7 @@ class TriageController extends Controller
                 'sellPerDay' => $rates === null ? null : $rates['sell']->toArray(),
                 'hoursPerDay' => EstimateUnit::HOURS_PER_DAY,
             ],
-            'position' => $engagement->positionSummary(),
+            'position' => $engagement->positionSummary($viewCommercials),
             'can' => [
                 'triage' => $user->can('triageAny', [WorkItem::class, $engagement]),
             ],

@@ -57,6 +57,7 @@ class ChangeRequestReminder extends Notification implements ShouldQueue
             ->action(__('Review the proposal'), URL::signedRoute('portal.change-requests.show', [
                 'changeRequest' => $this->changeRequest->id,
                 'stakeholder' => $notifiable->id,
+                'snapshot' => $this->changeRequest->customer_snapshot_id,
             ]));
     }
 }
