@@ -196,6 +196,78 @@ class Decision extends Model
     }
 
     /**
+     * Apply an edit to the draft (FA-18). The record is locked and re-read
+     * first: a confirmation that commits between loading the form and
+     * submitting it would otherwise let a stale request rewrite — or
+     * discard — a record that is already on the ledger. The attributes are
+     * built from the re-read record, so a partial form merges against what
+     * is actually stored.
+     *
+     * @param  callable(self): array<string, mixed>  $attributes
+     * @param  list<array{type: string, id: string}>  $links
+     */
+    public function updateDraft(callable $attributes, array $links, ?User $actor = null): void
+    {
+        DB::transaction(function () use ($attributes, $links, $actor): void {
+            self::query()->whereKey($this->id)->lockForUpdate()->first();
+
+            $this->unsetRelations();
+            $this->refresh();
+            $this->guardStillADraft();
+
+            $this->fill($attributes($this));
+
+            $changes = collect($this->getDirty())->except('updated_at')->keys()->all();
+
+            $this->save();
+
+            if ($changes !== []) {
+                AuditLog::record('decision.updated', $this, [
+                    'decision' => $this->title,
+                    'changed' => $changes,
+                    'updated_by' => $actor?->name,
+                ]);
+            }
+
+            $this->syncLinks($links, $actor);
+        });
+    }
+
+    /**
+     * Discard a draft that never became a decision, under the same lock —
+     * a draft confirmed a moment ago is governance record and stays.
+     */
+    public function discardDraft(?User $actor = null): void
+    {
+        DB::transaction(function () use ($actor): void {
+            self::query()->whereKey($this->id)->lockForUpdate()->first();
+
+            $this->unsetRelations();
+            $this->refresh();
+            $this->guardStillADraft();
+
+            AuditLog::record('decision.draft_discarded', $this, [
+                'decision' => $this->title,
+                'discarded_by' => $actor?->name,
+            ]);
+
+            $this->delete();
+        });
+    }
+
+    /**
+     * Refuse a write aimed at a draft that has since been confirmed.
+     */
+    protected function guardStillADraft(): void
+    {
+        if (! $this->status->acceptsEdits()) {
+            throw ValidationException::withMessages([
+                'title' => __('This decision was confirmed while you were working on it — the ledger keeps it. Record a superseding decision instead.'),
+            ]);
+        }
+    }
+
+    /**
      * Record the customer's acknowledgment of a shared decision (FA-18).
      * Acknowledgment is not approval — it is the customer confirming they
      * have seen the record — but it is stored immutably against the frozen

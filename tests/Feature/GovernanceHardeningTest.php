@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\BaselineStatus;
 use App\Enums\DecisionStatus;
 use App\Enums\DependencyEventType;
 use App\Enums\DependencyParty;
@@ -442,4 +443,252 @@ test('a risk raised high stays escalated in the register summary', function () {
     ], $manager);
 
     expect($engagement->escalatedRisks())->toHaveCount(1);
+});
+
+test('a draft confirmed mid-edit refuses the stale write', function () {
+    ['manager' => $manager, 'engagement' => $engagement] = hardeningSetup();
+
+    $decision = $engagement->recordDecision([
+        'title' => 'SSO excluded',
+        'context' => 'Context.',
+        'decision' => 'Excluded.',
+        'decided_on' => today(),
+    ], $manager);
+
+    // The record as another request loaded it, before the confirmation.
+    $stale = Decision::query()->whereKey($decision->id)->sole();
+
+    $decision->confirm($manager);
+
+    expect(fn () => $stale->updateDraft(fn (): array => ['title' => 'Rewritten'], []))
+        ->toThrow(ValidationException::class, 'confirmed while you were working on it')
+        ->and($decision->refresh()->title)->toBe('SSO excluded');
+});
+
+test('a draft confirmed mid-delete is kept', function () {
+    ['manager' => $manager, 'engagement' => $engagement] = hardeningSetup();
+
+    $decision = $engagement->recordDecision([
+        'title' => 'SSO excluded',
+        'context' => 'Context.',
+        'decision' => 'Excluded.',
+        'decided_on' => today(),
+    ], $manager);
+
+    $stale = Decision::query()->whereKey($decision->id)->sole();
+
+    $decision->confirm($manager);
+
+    expect(fn () => $stale->discardDraft($manager))
+        ->toThrow(ValidationException::class, 'confirmed while you were working on it')
+        ->and(Decision::query()->whereKey($decision->id)->exists())->toBeTrue();
+});
+
+test('a dependency settled mid-edit refuses the stale write', function () {
+    ['manager' => $manager, 'engagement' => $engagement] = hardeningSetup();
+
+    $dependency = $engagement->registerDependency([
+        'title' => 'Credentials',
+        'party' => DependencyParty::Internal,
+        'responsible_user_id' => $manager->id,
+        'required_on' => today()->addWeek(),
+        'visibility' => RecordVisibility::Internal,
+    ], $manager);
+
+    $stale = Dependency::query()->whereKey($dependency->id)->sole();
+
+    $dependency->recordEvent(DependencyEventType::Received, [], $manager);
+
+    expect(fn () => $stale->updateOutstanding(fn (): array => ['title' => 'Rewritten'], []))
+        ->toThrow(ValidationException::class, 'settled while you were working on it');
+});
+
+test('a flagged dependency can actually be reassigned', function () {
+    ['manager' => $manager, 'engagement' => $engagement, 'customer' => $customer, 'contact' => $contact] = hardeningSetup();
+
+    $dependency = $engagement->registerDependency([
+        'title' => 'Production database credentials',
+        'party' => DependencyParty::Customer,
+        'responsible_stakeholder_id' => $contact->id,
+        'required_on' => today()->addWeek(),
+        'visibility' => RecordVisibility::Shared,
+    ], $manager);
+
+    $contact->delete();
+
+    expect($dependency->refresh()->needsReassignment())->toBeTrue();
+
+    $successor = Stakeholder::factory()
+        ->for($engagement->organization)
+        ->for($customer)
+        ->role(StakeholderRole::ProjectManager)
+        ->create(['name' => 'Petra Molnar']);
+
+    $this->actingAs($manager)
+        ->get(route('dependencies.show', $dependency))
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('dependencies/show')
+            ->where('can.update', true)
+            ->has('options.stakeholders'));
+
+    $this->actingAs($manager)
+        ->patch(route('dependencies.update', $dependency), [
+            'title' => 'Production database credentials',
+            'party' => DependencyParty::Customer->value,
+            'responsible_stakeholder_id' => $successor->id,
+            'required_on' => today()->addWeek()->toDateString(),
+            'visibility' => RecordVisibility::Shared->value,
+        ])
+        ->assertRedirect();
+
+    $dependency->refresh();
+
+    expect($dependency->needsReassignment())->toBeFalse()
+        ->and($dependency->responsibleName())->toBe('Petra Molnar');
+});
+
+test('a superseded record stops asking to be acknowledged', function () {
+    ['manager' => $manager, 'engagement' => $engagement] = hardeningSetup();
+
+    $first = $engagement->recordDecision([
+        'title' => 'First',
+        'context' => 'Context.',
+        'decision' => 'Decided.',
+        'decided_on' => today()->subMonth(),
+        'visibility' => RecordVisibility::Shared,
+    ], $manager);
+    $first->confirm($manager);
+
+    $second = $engagement->recordDecision([
+        'title' => 'Second',
+        'context' => 'Context.',
+        'decision' => 'Decided again.',
+        'decided_on' => today(),
+        'supersedes_id' => $first->id,
+        'visibility' => RecordVisibility::Shared,
+    ], $manager);
+    $second->confirm($manager);
+
+    $this->actingAs($manager);
+
+    // Only the live record is still waiting on the customer.
+    $this->get(route('engagements.decisions.index', $engagement))
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('counts.awaitingAcknowledgement', 1));
+
+    $this->get(route('engagements.show', $engagement))
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('governance.decisions.awaitingAcknowledgement', 1));
+
+    $this->get(route('decisions.show', $first))
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('acknowledgementLinks', 0));
+
+    $this->get(route('decisions.show', $second))
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('acknowledgementLinks', 1));
+});
+
+test('a link the picker no longer offers can still be posted back or removed', function () {
+    ['manager' => $manager, 'engagement' => $engagement] = hardeningSetup();
+
+    $superseded = Baseline::factory()->for($engagement->organization)->for($engagement)->create(['version' => 1]);
+    $old = BaselineItem::factory()->for($engagement->organization)->for($superseded)->completeDeliverable()->create([
+        'title' => 'Item from version 1',
+    ]);
+    $superseded->forceFill(['status' => BaselineStatus::Approved, 'approved_at' => now()])->save();
+
+    $current = Baseline::factory()->for($engagement->organization)->for($engagement)->create(['version' => 2]);
+    $current->forceFill(['status' => BaselineStatus::Approved, 'approved_at' => now()])->save();
+
+    $draft = $engagement->recordDecision(['title' => 'Draft', 'context' => 'Context.'], $manager);
+
+    // The picker only offers the current version's items…
+    $this->actingAs($manager)
+        ->get(route('decisions.show', $draft))
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('options.records', fn ($records) => collect($records)
+                ->doesntContain(fn (array $record): bool => $record['id'] === $old->id)));
+
+    // …but a link to the older item is accepted and readable back.
+    $this->actingAs($manager)
+        ->patch(route('decisions.update', $draft), [
+            'title' => 'Draft',
+            'context' => 'Context.',
+            'visibility' => RecordVisibility::Internal->value,
+            'links' => [['type' => BaselineItem::class, 'id' => $old->id]],
+        ])
+        ->assertRedirect();
+
+    expect($draft->refresh()->links->sole()->describe()['title'])->toBe('Item from version 1');
+
+    // And removing every chip clears it.
+    $this->actingAs($manager)
+        ->patch(route('decisions.update', $draft), [
+            'title' => 'Draft',
+            'context' => 'Context.',
+            'visibility' => RecordVisibility::Internal->value,
+        ])
+        ->assertRedirect();
+
+    expect($draft->refresh()->links)->toBeEmpty();
+});
+
+test('an enormous transcript line still proposes a draft that can be confirmed', function () {
+    ['manager' => $manager, 'engagement' => $engagement] = hardeningSetup();
+
+    $line = 'Decision: '.str_repeat('we rebuild the importer and re-run the migration, ', 900);
+
+    $this->actingAs($manager)
+        ->post(route('engagements.decisions.transcript', $engagement), ['transcript' => $line])
+        ->assertRedirect();
+
+    $draft = Decision::query()->sole();
+
+    expect(mb_strlen((string) $draft->decision))->toBeLessThanOrEqual(5000)
+        ->and(mb_strlen($draft->context))->toBeLessThanOrEqual(5000);
+
+    // The draft survives the edit that adds the date, then confirms.
+    $this->actingAs($manager)
+        ->patch(route('decisions.update', $draft), [
+            'title' => $draft->title,
+            'context' => $draft->context,
+            'decision' => $draft->decision,
+            'decided_on' => today()->toDateString(),
+            'visibility' => RecordVisibility::Internal->value,
+        ])
+        ->assertValid()
+        ->assertRedirect();
+
+    $this->actingAs($manager)
+        ->post(route('decisions.confirm', $draft))
+        ->assertRedirect();
+
+    expect($draft->refresh()->status)->toBe(DecisionStatus::Confirmed);
+});
+
+test('an evidence trail entry carries the link that proves it', function () {
+    ['manager' => $manager, 'engagement' => $engagement] = hardeningSetup();
+
+    $dependency = $engagement->registerDependency([
+        'title' => 'Credentials',
+        'party' => DependencyParty::Internal,
+        'responsible_user_id' => $manager->id,
+        'required_on' => today()->addWeek(),
+        'visibility' => RecordVisibility::Internal,
+    ], $manager);
+
+    $this->actingAs($manager)
+        ->post(route('dependencies.events.store', $dependency), [
+            'type' => DependencyEventType::Reminded->value,
+            'channel' => 'Email',
+            'note' => 'Chased again.',
+            'evidence_url' => 'https://mail.example.test/thread/42',
+        ])
+        ->assertRedirect();
+
+    $this->actingAs($manager)
+        ->get(route('dependencies.show', $dependency))
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('events.0.evidenceUrl', 'https://mail.example.test/thread/42'));
 });

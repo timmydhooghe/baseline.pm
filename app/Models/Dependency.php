@@ -201,6 +201,49 @@ class Dependency extends Model
     }
 
     /**
+     * Apply an edit to an outstanding item (FA-20), locking and re-reading
+     * first: an arrival recorded between loading the form and submitting it
+     * would otherwise let a stale request move the required date a delay was
+     * already attributed against.
+     *
+     * @param  callable(self): array<string, mixed>  $attributes
+     * @param  list<array{type: string, id: string}>  $links
+     */
+    public function updateOutstanding(callable $attributes, array $links, ?User $actor = null): void
+    {
+        DB::transaction(function () use ($attributes, $links, $actor): void {
+            self::query()->whereKey($this->id)->lockForUpdate()->first();
+
+            $this->unsetRelations();
+            $this->refresh();
+
+            if (! $this->status->isOutstanding()) {
+                throw ValidationException::withMessages([
+                    'title' => __('This dependency was settled while you were working on it — its record and trail are closed.'),
+                ]);
+            }
+
+            $this->fill($attributes($this));
+
+            $changes = collect($this->getDirty())->except('updated_at')->keys()->all();
+
+            $this->save();
+
+            if ($changes !== []) {
+                AuditLog::record('dependency.updated', $this, [
+                    'dependency' => $this->title,
+                    'changed' => $changes,
+                    'required_on' => $this->required_on->toDateString(),
+                    'responsible' => $this->responsibleName(),
+                    'updated_by' => $actor?->name,
+                ]);
+            }
+
+            $this->syncLinks($links, $actor);
+        });
+    }
+
+    /**
      * Replace the deliverables and milestones this dependency blocks
      * (FA-20).
      *

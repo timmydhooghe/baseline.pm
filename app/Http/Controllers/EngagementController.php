@@ -183,7 +183,7 @@ class EngagementController extends Controller
                     'drafts' => $engagement->decisions()->where('status', DecisionStatus::Draft)->count(),
                     'awaitingAcknowledgement' => $engagement->decisions()
                         ->where('visibility', RecordVisibility::Shared)
-                        ->whereNot('status', DecisionStatus::Draft)
+                        ->where('status', DecisionStatus::Confirmed)
                         ->whereNull('acknowledged_at')
                         ->count(),
                 ],

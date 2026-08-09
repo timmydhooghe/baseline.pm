@@ -21,7 +21,7 @@ export default function LinkedRecordsField({
     testId = 'linked-records',
 }: {
     records: RecordChip[];
-    defaultSelected?: { type: string; id: string }[];
+    defaultSelected?: RecordChip[];
     name?: string;
     label?: string;
     hint?: string;
@@ -30,6 +30,19 @@ export default function LinkedRecordsField({
     const [selected, setSelected] = useState<string[]>(
         defaultSelected.map(chipKey),
     );
+
+    /*
+     * Everything already linked stays togglable even when the picker no
+     * longer offers it — a record from an earlier baseline version, or one
+     * since deleted. Rendering only the offered list would leave those
+     * links posted as hidden inputs with no way to remove them, and a
+     * deleted target would then fail validation on every save.
+     */
+    const offered = new Set(records.map(chipKey));
+    const options: RecordChip[] = [
+        ...records,
+        ...defaultSelected.filter((record) => !offered.has(chipKey(record))),
+    ];
 
     const toggle = (key: string) =>
         setSelected((current) =>
@@ -43,15 +56,16 @@ export default function LinkedRecordsField({
             <span className="font-plex-mono text-[11px] font-semibold tracking-[0.08em] text-stone uppercase dark:text-fog">
                 {label}
             </span>
-            {records.length === 0 ? (
+            {options.length === 0 ? (
                 <p className="text-[12px] text-stone dark:text-fog">
                     This engagement has no records to link yet.
                 </p>
             ) : (
                 <div className="flex flex-wrap gap-1.5">
-                    {records.map((record) => {
+                    {options.map((record) => {
                         const key = chipKey(record);
                         const isSelected = selected.includes(key);
+                        const isStale = !offered.has(key);
 
                         return (
                             <button
@@ -71,6 +85,12 @@ export default function LinkedRecordsField({
                                     {record.type_label}
                                 </span>{' '}
                                 {record.title}
+                                {isStale && (
+                                    <span className="opacity-70">
+                                        {' '}
+                                        · no longer offered
+                                    </span>
+                                )}
                             </button>
                         );
                     })}

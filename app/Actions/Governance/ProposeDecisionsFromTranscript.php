@@ -30,6 +30,14 @@ class ProposeDecisionsFromTranscript
     private const int CONTEXT_LINES = 3;
 
     /**
+     * The ceiling the decision form itself enforces on context and outcome.
+     * A transcript is allowed to be far longer than one record, so a single
+     * enormous line has to be cut here — a draft nobody can save because its
+     * own extraction overflowed validation is worse than a shortened one.
+     */
+    private const int MAX_TEXT = 5000;
+
+    /**
      * Lines that announce a decision outright, whatever follows the marker.
      */
     private const string MARKER_PREFIX = '/^(decision|decisions|decided|agreed|conclusion)\s*[:\x{2013}\x{2014}-]\s*(.+)$/iu';
@@ -78,10 +86,10 @@ class ProposeDecisionsFromTranscript
             $proposals[] = [
                 'source' => DecisionSource::Transcript,
                 'title' => Str::limit(Str::ucfirst($sentence), 120),
-                'context' => $excerpt,
-                'decision' => $sentence,
+                'context' => $this->capped($excerpt),
+                'decision' => $this->capped($sentence),
                 'participants' => $participants,
-                'transcript_excerpt' => $excerpt,
+                'transcript_excerpt' => $this->capped($excerpt),
             ];
 
             if (count($proposals) === self::MAX_PROPOSALS) {
@@ -90,6 +98,16 @@ class ProposeDecisionsFromTranscript
         }
 
         return $proposals;
+    }
+
+    /**
+     * Text cut to the ceiling the decision form enforces, ellipsis included
+     * in the count — an extraction that overflows its own validation leaves
+     * a draft nobody can save.
+     */
+    private function capped(string $text): string
+    {
+        return Str::limit($text, self::MAX_TEXT - 1, '…');
     }
 
     /**

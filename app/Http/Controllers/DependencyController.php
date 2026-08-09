@@ -6,7 +6,6 @@ use App\Actions\Governance\LinkableRecords;
 use App\Enums\DependencyEventType;
 use App\Http\Requests\Dependencies\StoreDependencyRequest;
 use App\Http\Requests\Dependencies\UpdateDependencyRequest;
-use App\Models\AuditLog;
 use App\Models\Dependency;
 use App\Models\DependencyEvent;
 use App\Models\DependencyLink;
@@ -146,21 +145,11 @@ class DependencyController extends Controller
         $user = $request->user();
         $actor = $user instanceof User ? $user : null;
 
-        $dependency->fill($this->attributes($validated));
-        $changes = collect($dependency->getDirty())->except('updated_at')->keys()->all();
-        $dependency->save();
-
-        if ($changes !== []) {
-            AuditLog::record('dependency.updated', $dependency, [
-                'dependency' => $dependency->title,
-                'changed' => $changes,
-                'required_on' => $dependency->required_on->toDateString(),
-                'responsible' => $dependency->responsibleName(),
-                'updated_by' => $actor?->name,
-            ]);
-        }
-
-        $dependency->syncLinks(LinkableRecords::targets($validated['links'] ?? []), $actor);
+        $dependency->updateOutstanding(
+            fn (): array => $this->attributes($validated),
+            LinkableRecords::targets($validated['links'] ?? []),
+            $actor,
+        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Dependency updated.')]);
 

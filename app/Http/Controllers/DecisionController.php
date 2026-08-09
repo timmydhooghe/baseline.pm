@@ -7,7 +7,6 @@ use App\Enums\DecisionStatus;
 use App\Enums\RecordVisibility;
 use App\Http\Requests\Decisions\StoreDecisionRequest;
 use App\Http\Requests\Decisions\UpdateDecisionRequest;
-use App\Models\AuditLog;
 use App\Models\Decision;
 use App\Models\DecisionLink;
 use App\Models\Engagement;
@@ -69,9 +68,14 @@ class DecisionController extends Controller
                 'total' => $decisions->count(),
                 'drafts' => $decisions->where('status', DecisionStatus::Draft)->count(),
                 'shared' => $decisions->where('visibility', RecordVisibility::Shared)->count(),
+                /*
+                 * A superseded record can no longer be acknowledged, so
+                 * counting it here would leave an alert nobody can ever
+                 * clear.
+                 */
                 'awaitingAcknowledgement' => $decisions
                     ->filter(fn (Decision $decision): bool => $decision->visibility->isShared()
-                        && $decision->status->isConfirmed()
+                        && $decision->status === DecisionStatus::Confirmed
                         && $decision->acknowledged_at === null)
                     ->count(),
             ],
@@ -175,19 +179,11 @@ class DecisionController extends Controller
         $validated = $request->validated();
         $user = $request->user();
 
-        $decision->fill($this->attributes($validated, $decision));
-        $changes = collect($decision->getDirty())->except('updated_at')->keys()->all();
-        $decision->save();
-
-        if ($changes !== []) {
-            AuditLog::record('decision.updated', $decision, [
-                'decision' => $decision->title,
-                'changed' => $changes,
-                'updated_by' => $user?->name,
-            ]);
-        }
-
-        $decision->syncLinks($this->linkTargets($validated), $user instanceof User ? $user : null);
+        $decision->updateDraft(
+            fn (Decision $fresh): array => $this->attributes($validated, $fresh),
+            $this->linkTargets($validated),
+            $user instanceof User ? $user : null,
+        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Decision draft updated.')]);
 
@@ -202,13 +198,9 @@ class DecisionController extends Controller
         Gate::authorize('delete', $decision);
 
         $engagement = $decision->engagement;
+        $user = $request->user();
 
-        AuditLog::record('decision.draft_discarded', $decision, [
-            'decision' => $decision->title,
-            'discarded_by' => $request->user()?->name,
-        ]);
-
-        $decision->delete();
+        $decision->discardDraft($user instanceof User ? $user : null);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Decision draft discarded.')]);
 
@@ -260,7 +252,9 @@ class DecisionController extends Controller
      */
     private function acknowledgementLinks(Decision $decision): array
     {
-        if (! $decision->visibility->isShared() || $decision->customer_snapshot_id === null) {
+        if (! $decision->visibility->isShared()
+            || $decision->customer_snapshot_id === null
+            || $decision->status !== DecisionStatus::Confirmed) {
             return [];
         }
 
