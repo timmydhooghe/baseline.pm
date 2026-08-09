@@ -211,6 +211,8 @@ class DeliverableController extends Controller
                     && $deliverable->status->acceptsUpdates(),
                 'submit' => ($user instanceof User && $user->can('submit', $deliverable))
                     && $deliverable->status->canTransitionTo(DeliverableStatus::AwaitingAcceptance),
+                'withdraw' => ($user instanceof User && $user->can('submit', $deliverable))
+                    && $deliverable->status === DeliverableStatus::AwaitingAcceptance,
             ],
         ]);
     }

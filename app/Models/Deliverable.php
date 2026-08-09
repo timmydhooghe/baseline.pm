@@ -6,6 +6,7 @@ use App\Enums\AcceptanceDecision;
 use App\Enums\BaselineItemType;
 use App\Enums\DeliverableConfidence;
 use App\Enums\DeliverableStatus;
+use App\Enums\EngagementStatus;
 use App\Enums\RecordVisibility;
 use App\Models\Concerns\BelongsToOrganization;
 use App\Notifications\DeliverableSubmitted;
@@ -124,10 +125,16 @@ class Deliverable extends Model
      * existing records (repointed beforehand by the minting flow) are left
      * alone. The per-criterion state starts aligned with the item's criteria:
      * no evidence yet, shared by default.
+     *
+     * Scope that lands while the engagement's final acceptance sits with the
+     * customer invalidates it: the frozen record they were asked to sign no
+     * longer covers the engagement, so it is withdrawn and the engagement
+     * reopens for delivery (FA-24).
      */
     public static function provisionForBaseline(Baseline $baseline): void
     {
         $items = $baseline->items()->where('type', BaselineItemType::Deliverable)->get();
+        $provisioned = 0;
 
         foreach ($items as $item) {
             if (self::query()->withoutGlobalScopes()->where('baseline_item_id', $item->id)->exists()) {
@@ -149,6 +156,12 @@ class Deliverable extends Model
                 'organization_id' => $baseline->organization_id,
                 'baseline_item_id' => $item->id,
             ]);
+
+            $provisioned++;
+        }
+
+        if ($provisioned > 0 && $baseline->engagement->status === EngagementStatus::AwaitingFinalAcceptance) {
+            $baseline->engagement->transitionTo(EngagementStatus::Active);
         }
     }
 
@@ -187,9 +200,10 @@ class Deliverable extends Model
      * internal review snapshot plus a customer-facing one carrying shared
      * evidence only, stamp the respond-by deadline and notify every
      * stakeholder with approval rights. Acceptance is evidence-backed —
-     * every criterion must link its evidence before the review can start.
-     * The row is locked and re-read so the snapshots freeze exactly the
-     * committed record.
+     * every criterion must link its evidence, and the customer must be able
+     * to see at least one piece of it, before the review can start. The row
+     * is locked and re-read so the snapshots freeze exactly the committed
+     * record.
      */
     public function submitForAcceptance(DateTimeInterface|string $respondBy, ?User $submitter = null): void
     {
@@ -200,7 +214,7 @@ class Deliverable extends Model
 
             $this->unsetRelations();
             $this->refresh();
-            $this->load(['baselineItem.baseline', 'baselineItem.owner', 'milestoneItem', 'engagement.customer', 'evidence']);
+            $this->load(['baselineItem.baseline', 'baselineItem.owner', 'milestoneItem', 'engagement.customer.stakeholders', 'evidence']);
 
             if (! $this->status->canTransitionTo(DeliverableStatus::AwaitingAcceptance)) {
                 throw new LogicException("A deliverable cannot be submitted from [{$this->status->value}].");
@@ -209,6 +223,17 @@ class Deliverable extends Model
             if ($respondBy->isPast()) {
                 throw ValidationException::withMessages([
                     'respond_by' => __('The respond-by deadline must lie in the future.'),
+                ]);
+            }
+
+            /*
+             * With nobody who can sign, submission would freeze the record
+             * against a decision that can never arrive — acceptance always
+             * needs a customer approver.
+             */
+            if ($this->approvers()->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'respond_by' => __('This customer has no stakeholder who can approve — invite an approver before submitting.'),
                 ]);
             }
 
@@ -224,12 +249,29 @@ class Deliverable extends Model
                 ]);
             }
 
+            /*
+             * Criteria alone do not carry the guarantee: a change-request
+             * deliverable is minted without any, and internal evidence never
+             * reaches the portal. Either way the customer would be asked to
+             * sign against an empty record, so require something they can see.
+             */
+            if ($this->evidence->every(fn (DeliverableEvidence $evidence): bool => ! $evidence->visibility->isShared())) {
+                throw ValidationException::withMessages([
+                    'criteria' => __('Acceptance is evidence-backed — share at least one piece of evidence with the customer before submitting.'),
+                ]);
+            }
+
+            /*
+             * The deadline is part of what the customer is asked to agree to,
+             * so it is stamped before the payloads freeze around it.
+             */
+            $this->respond_by = $respondBy;
+
             $review = Snapshot::capture($this, $this->snapshotPayload(internal: true), $submitter);
             $customer = Snapshot::capture($this, $this->snapshotPayload(internal: false), $submitter);
 
             $this->status = DeliverableStatus::AwaitingAcceptance;
             $this->submitted_at = now();
-            $this->respond_by = $respondBy;
             $this->decided_at = null;
             $this->review_snapshot_id = $review->id;
             $this->customer_snapshot_id = $customer->id;
@@ -246,6 +288,36 @@ class Deliverable extends Model
         foreach ($this->approvers() as $approver) {
             $approver->notify(new DeliverableSubmitted($this));
         }
+    }
+
+    /**
+     * Pull a submitted deliverable back before the customer has decided —
+     * the submission was premature, or the approvers who could sign it are
+     * gone. The frozen snapshots stay on record and the record reopens for
+     * editing; resubmission freezes fresh ones.
+     */
+    public function withdrawSubmission(?User $actor = null): void
+    {
+        DB::transaction(function () use ($actor): void {
+            self::query()->whereKey($this->id)->lockForUpdate()->first();
+
+            $this->unsetRelations();
+            $this->refresh();
+
+            if ($this->status !== DeliverableStatus::AwaitingAcceptance) {
+                throw ValidationException::withMessages([
+                    'status' => __('Only a deliverable awaiting the customer decision can be withdrawn.'),
+                ]);
+            }
+
+            $this->status = DeliverableStatus::InProgress;
+            $this->save();
+
+            AuditLog::record('deliverable.submission_withdrawn', $this, [
+                'deliverable' => $this->baselineItem->title,
+                'withdrawn_by' => $actor?->name,
+            ]);
+        });
     }
 
     /**

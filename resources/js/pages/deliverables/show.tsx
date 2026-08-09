@@ -45,7 +45,7 @@ type Props = {
     milestoneOptions: DeliverableMilestoneOption[];
     engagement: { id: string; name: string };
     position: EngagementPositionSummary;
-    can: { update: boolean; submit: boolean };
+    can: { update: boolean; submit: boolean; withdraw: boolean };
 };
 
 const sectionLabel =
@@ -142,15 +142,38 @@ export default function DeliverablesShow({
                 {deliverable.status === 'awaiting_acceptance' && (
                     <div
                         className={cn(
-                            'border-[1.5px] px-4 py-3 font-plex-mono text-[12px] font-semibold uppercase',
+                            'flex flex-wrap items-center justify-between gap-3 border-[1.5px] px-4 py-3',
                             deliverable.respondByOverdue
                                 ? 'border-rust text-rust'
                                 : 'border-ink bg-sun/40 dark:border-paper',
                         )}
                     >
-                        {deliverable.respondByOverdue
-                            ? `Frozen for customer review — the response deadline of ${deliverable.respondBy} has passed.`
-                            : `Frozen for customer review — response due ${deliverable.respondBy}.`}
+                        <span className="font-plex-mono text-[12px] font-semibold uppercase">
+                            {deliverable.respondByOverdue
+                                ? `Frozen for customer review — the response deadline of ${deliverable.respondBy} has passed.`
+                                : `Frozen for customer review — response due ${deliverable.respondBy}.`}
+                        </span>
+                        {can.withdraw && (
+                            <Form
+                                {...DeliverableSubmissionController.destroy.form(
+                                    deliverable.id,
+                                )}
+                                options={{ preserveScroll: true }}
+                            >
+                                {({ processing }) => (
+                                    <Button
+                                        type="submit"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={processing}
+                                        className="rounded-none border-[1.5px] border-ink font-semibold shadow-none dark:border-paper"
+                                        data-test="withdraw-submission"
+                                    >
+                                        Withdraw submission
+                                    </Button>
+                                )}
+                            </Form>
+                        )}
                     </div>
                 )}
                 {deliverable.status === 'rejected' && (

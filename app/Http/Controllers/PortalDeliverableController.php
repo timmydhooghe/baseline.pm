@@ -62,9 +62,14 @@ class PortalDeliverableController extends Controller
                 ])
                 ->values(),
             'canRespond' => $deliverable->status === DeliverableStatus::AwaitingAcceptance,
+            /*
+             * The respond link is minted for the snapshot on screen, so a
+             * signature can only ever land on the record it was read from.
+             */
             'respondUrl' => URL::signedRoute('portal.deliverables.respond', [
                 'deliverable' => $deliverable->id,
                 'stakeholder' => $stakeholder->id,
+                'snapshot' => $snapshot->id,
             ]),
         ]);
     }
@@ -75,6 +80,21 @@ class PortalDeliverableController extends Controller
     public function store(Request $request, Deliverable $deliverable, Stakeholder $stakeholder): RedirectResponse
     {
         $this->authorizeStakeholder($deliverable, $stakeholder);
+
+        /*
+         * A deliverable that was withdrawn, reworked and resubmitted carries
+         * a different frozen record than the one this form was rendered from.
+         * Signing binds the reviewer to what they actually read, so a stale
+         * form is sent back to the current version instead of deciding on it.
+         */
+        if ($request->query('snapshot') !== $deliverable->customer_snapshot_id) {
+            Inertia::flash('toast', ['type' => 'warning', 'message' => __('This deliverable was revised after you opened it — please review the current version before deciding.')]);
+
+            return redirect()->to(URL::signedRoute('portal.deliverables.show', [
+                'deliverable' => $deliverable->id,
+                'stakeholder' => $stakeholder->id,
+            ]));
+        }
 
         $validated = $request->validate([
             'decision' => ['required', Rule::enum(AcceptanceDecision::class)],

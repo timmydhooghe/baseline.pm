@@ -60,9 +60,14 @@ class PortalChangeRequestController extends Controller
                 ])
                 ->values(),
             'canRespond' => $changeRequest->status === ChangeRequestStatus::AwaitingApproval,
+            /*
+             * The respond link is minted for the snapshot on screen, so a
+             * decision can only ever land on the proposal it was read from.
+             */
             'respondUrl' => URL::signedRoute('portal.change-requests.respond', [
                 'changeRequest' => $changeRequest->id,
                 'stakeholder' => $stakeholder->id,
+                'snapshot' => $snapshot->id,
             ]),
         ]);
     }
@@ -73,6 +78,21 @@ class PortalChangeRequestController extends Controller
     public function store(Request $request, ChangeRequest $changeRequest, Stakeholder $stakeholder): RedirectResponse
     {
         $this->authorizeStakeholder($changeRequest, $stakeholder);
+
+        /*
+         * A clarification request reopens the assessment, and resubmission
+         * freezes a new proposal — often at a different price. Approval binds
+         * the customer to what they actually read, so a form rendered from
+         * the superseded snapshot is sent back to the current one.
+         */
+        if ($request->query('snapshot') !== $changeRequest->customer_snapshot_id) {
+            Inertia::flash('toast', ['type' => 'warning', 'message' => __('This proposal was revised after you opened it — please review the current version before deciding.')]);
+
+            return redirect()->to(URL::signedRoute('portal.change-requests.show', [
+                'changeRequest' => $changeRequest->id,
+                'stakeholder' => $stakeholder->id,
+            ]));
+        }
 
         $validated = $request->validate([
             'decision' => ['required', Rule::enum(ChangeRequestDecision::class)],

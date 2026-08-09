@@ -550,6 +550,7 @@ test('the portal records the decision immutably against the frozen snapshot', fu
     $respondUrl = URL::signedRoute('portal.deliverables.respond', [
         'deliverable' => $record->id,
         'stakeholder' => $approver->id,
+        'snapshot' => $record->refresh()->customer_snapshot_id,
     ]);
 
     $this->post($respondUrl, ['decision' => 'accepted', 'comment' => 'Signed off in the portal.'])
@@ -860,6 +861,246 @@ test('the deliverable record shows its full history and context', function () {
             ->has('responses', 1)
             ->where('can.update', false)
             ->where('can.submit', false));
+});
+
+test('the frozen record carries the deadline the customer is asked to meet', function () {
+    Notification::fake();
+
+    $setup = acceptanceSetup();
+    ['manager' => $manager, 'checkoutRecord' => $record] = $setup;
+
+    linkCriterionEvidence($record, $manager);
+    $record->submitForAcceptance(today()->addDays(14), $manager);
+
+    $record->refresh();
+
+    expect($record->customerSnapshot?->payload['respond_by'])->toBe(today()->addDays(14)->toDateString())
+        ->and($record->reviewSnapshot?->payload['respond_by'])->toBe(today()->addDays(14)->toDateString());
+});
+
+test('a superseded review link cannot sign the record that replaced it', function () {
+    Notification::fake();
+
+    $setup = acceptanceSetup();
+    ['manager' => $manager, 'approver' => $approver, 'checkoutRecord' => $record] = $setup;
+
+    linkCriterionEvidence($record, $manager);
+    $record->submitForAcceptance(today()->addDays(14), $manager);
+
+    // The approver opens the review and keeps the form: this link carries
+    // the snapshot they actually read.
+    $staleUrl = URL::signedRoute('portal.deliverables.respond', [
+        'deliverable' => $record->id,
+        'stakeholder' => $approver->id,
+        'snapshot' => $record->refresh()->customer_snapshot_id,
+    ]);
+
+    // A clarification reopens the record; rework and resubmission freeze a
+    // different one.
+    $record->recordResponse($approver, AcceptanceDecision::ClarificationRequested, 'Which browsers were tested?');
+    $record->refresh()->update(['progress' => 95]);
+    $record->submitForAcceptance(today()->addDays(7), $manager);
+
+    $this->post($staleUrl, ['decision' => 'accepted'])->assertRedirect();
+
+    expect($record->refresh()->status)->toBe(DeliverableStatus::AwaitingAcceptance)
+        ->and($record->responses()->where('decision', AcceptanceDecision::Accepted)->exists())->toBeFalse();
+
+    // The link the portal mints for the current record signs it.
+    $this->post(URL::signedRoute('portal.deliverables.respond', [
+        'deliverable' => $record->id,
+        'stakeholder' => $approver->id,
+        'snapshot' => $record->customer_snapshot_id,
+    ]), ['decision' => 'accepted'])->assertRedirect();
+
+    expect($record->refresh()->status)->toBe(DeliverableStatus::Accepted);
+});
+
+test('the portal mints its respond link for the snapshot on screen', function () {
+    Notification::fake();
+
+    $setup = acceptanceSetup();
+    ['manager' => $manager, 'approver' => $approver, 'checkoutRecord' => $record] = $setup;
+
+    linkCriterionEvidence($record, $manager);
+    $record->submitForAcceptance(today()->addDays(14), $manager);
+
+    $this->get(URL::signedRoute('portal.deliverables.show', [
+        'deliverable' => $record->id,
+        'stakeholder' => $approver->id,
+    ]))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('respondUrl', fn (string $url): bool => str_contains($url, 'snapshot='.$record->refresh()->customer_snapshot_id)));
+});
+
+test('submission needs someone who can sign, and can be withdrawn when nobody can', function () {
+    Notification::fake();
+
+    $setup = acceptanceSetup();
+    ['manager' => $manager, 'approver' => $approver, 'checkoutRecord' => $record] = $setup;
+
+    linkCriterionEvidence($record, $manager);
+    $approver->update(['role' => StakeholderRole::Viewer]);
+
+    // Freezing the record against a decision nobody can make is a dead end.
+    $this->actingAs($manager)
+        ->post(route('deliverables.submit', $record), ['respond_by' => today()->addDays(7)->toDateString()])
+        ->assertInvalid(['respond_by']);
+
+    expect($record->refresh()->status)->toBe(DeliverableStatus::InProgress);
+
+    // Submitted while an approver existed, then left without one: the record
+    // reopens instead of waiting forever.
+    $approver->update(['role' => StakeholderRole::Approver]);
+    $record->submitForAcceptance(today()->addDays(7), $manager);
+    $approver->update(['role' => StakeholderRole::Viewer]);
+
+    $this->actingAs($manager)
+        ->delete(route('deliverables.submit.withdraw', $record))
+        ->assertRedirect(route('deliverables.show', $record));
+
+    expect($record->refresh()->status)->toBe(DeliverableStatus::InProgress)
+        ->and($record->customer_snapshot_id)->not->toBeNull()
+        ->and(AuditLog::query()->where('action', 'deliverable.submission_withdrawn')->where('subject_id', $record->id)->exists())->toBeTrue();
+
+    // Only a submitted record can be withdrawn.
+    $this->actingAs($manager)
+        ->delete(route('deliverables.submit.withdraw', $record))
+        ->assertInvalid(['status']);
+});
+
+test('a change-request deliverable cannot be signed off without evidence the customer can see', function () {
+    Notification::fake();
+
+    $setup = acceptanceSetup();
+    ['manager' => $manager, 'organization' => $organization, 'engagement' => $engagement, 'approver' => $approver, 'developer' => $developer] = $setup;
+
+    $changeRequest = $engagement->draftChangeRequest([
+        'title' => 'Supplier portal module',
+        'what' => 'A supplier-facing portal was requested in the last steering call.',
+        'origin' => ChangeRequestOrigin::SteeringCall,
+    ], $manager);
+    $changeRequest->startAssessment($manager);
+    $changeRequest->allocations()->create([
+        'organization_id' => $organization->id,
+        'rate_card_role_id' => $developer->id,
+        'days' => '3',
+    ]);
+    $changeRequest->moveToProposal($manager);
+    $changeRequest->update(['customer_price' => Money::fromCents(400000)]);
+    $changeRequest->submitToCustomer(today()->addDays(7), $manager);
+    $changeRequest->refresh()->recordResponse($approver, ChangeRequestDecision::Approved);
+
+    $appended = Deliverable::query()
+        ->where('engagement_id', $engagement->id)
+        ->get()
+        ->first(fn (Deliverable $deliverable): bool => $deliverable->baselineItem->title === 'Supplier portal module');
+
+    // A minted deliverable carries no acceptance criteria, so the criterion
+    // gate has nothing to catch — an empty review would go to the customer.
+    expect($appended->criteria())->toBe([]);
+
+    $this->actingAs($manager)
+        ->post(route('deliverables.submit', $appended), ['respond_by' => today()->addDays(7)->toDateString()])
+        ->assertInvalid(['criteria']);
+
+    // Internal evidence is still nothing the customer can see.
+    $appended->evidence()->create([
+        'organization_id' => $organization->id,
+        'kind' => EvidenceKind::Document,
+        'label' => 'Internal handover note',
+        'visibility' => RecordVisibility::Internal,
+        'added_by' => $manager->id,
+    ]);
+
+    $this->actingAs($manager)
+        ->post(route('deliverables.submit', $appended), ['respond_by' => today()->addDays(7)->toDateString()])
+        ->assertInvalid(['criteria']);
+
+    $appended->evidence()->create([
+        'organization_id' => $organization->id,
+        'kind' => EvidenceKind::Demo,
+        'label' => 'Supplier portal walkthrough',
+        'visibility' => RecordVisibility::Shared,
+        'added_by' => $manager->id,
+    ]);
+
+    $this->actingAs($manager)
+        ->post(route('deliverables.submit', $appended), ['respond_by' => today()->addDays(7)->toDateString()])
+        ->assertRedirect(route('deliverables.show', $appended));
+
+    expect($appended->refresh()->status)->toBe(DeliverableStatus::AwaitingAcceptance)
+        ->and($appended->customerSnapshot?->payload['evidence'])->toHaveCount(1);
+});
+
+test('scope approved after the freeze reopens the engagement and blocks completion', function () {
+    Notification::fake();
+
+    $setup = acceptanceSetup();
+    ['manager' => $manager, 'organization' => $organization, 'engagement' => $engagement, 'approver' => $approver, 'developer' => $developer, 'checkoutRecord' => $checkoutRecord, 'reportingRecord' => $reportingRecord] = $setup;
+
+    // A change request is already with the customer when the engagement goes
+    // up for final acceptance.
+    $changeRequest = $engagement->draftChangeRequest([
+        'title' => 'Supplier portal module',
+        'what' => 'A supplier-facing portal was requested in the last steering call.',
+        'origin' => ChangeRequestOrigin::SteeringCall,
+    ], $manager);
+    $changeRequest->startAssessment($manager);
+    $changeRequest->allocations()->create([
+        'organization_id' => $organization->id,
+        'rate_card_role_id' => $developer->id,
+        'days' => '3',
+    ]);
+    $changeRequest->moveToProposal($manager);
+    $changeRequest->update(['customer_price' => Money::fromCents(400000)]);
+    $changeRequest->submitToCustomer(today()->addDays(14), $manager);
+
+    signOffDeliverable($checkoutRecord, $manager, $approver);
+    signOffDeliverable($reportingRecord, $manager, $approver);
+    $finalAcceptance = $engagement->submitForFinalAcceptance(today()->addDays(7), $manager);
+
+    // Approving it now adds a deliverable the frozen record never listed.
+    $changeRequest->refresh()->recordResponse($approver, ChangeRequestDecision::Approved);
+
+    expect($engagement->refresh()->status)->toBe(EngagementStatus::Active)
+        ->and($finalAcceptance->refresh()->status)->toBe(FinalAcceptanceStatus::Withdrawn)
+        ->and($engagement->deliverables()->where('status', DeliverableStatus::Accepted)->count())->toBe(2)
+        ->and($engagement->deliverables()->count())->toBe(3);
+
+    // The withdrawn record cannot complete the engagement...
+    expect(fn () => $finalAcceptance->recordResponse($approver, AcceptanceDecision::Accepted))
+        ->toThrow(ValidationException::class);
+
+    // ...and a fresh one waits until the new scope is signed too.
+    expect(fn () => $engagement->submitForFinalAcceptance(today()->addDays(7), $manager))
+        ->toThrow(ValidationException::class);
+
+    expect($engagement->refresh()->status)->toBe(EngagementStatus::Active);
+});
+
+test('final acceptance refuses to close over a deliverable that is not signed', function () {
+    Notification::fake();
+
+    $setup = acceptanceSetup();
+    ['manager' => $manager, 'organization' => $organization, 'engagement' => $engagement, 'approver' => $approver, 'checkoutRecord' => $checkoutRecord, 'reportingRecord' => $reportingRecord] = $setup;
+
+    signOffDeliverable($checkoutRecord, $manager, $approver);
+    signOffDeliverable($reportingRecord, $manager, $approver);
+    $finalAcceptance = $engagement->submitForFinalAcceptance(today()->addDays(7), $manager);
+
+    // An unsigned deliverable appearing by any other route still stops the
+    // gate: the signed set must be the whole engagement.
+    $laterBaseline = Baseline::factory()->for($organization)->for($engagement)->create(['version' => 2]);
+    $laterItem = BaselineItem::factory()->for($organization)->for($laterBaseline)->completeDeliverable()->create();
+    Deliverable::factory()->for($organization)->for($engagement)->create(['baseline_item_id' => $laterItem->id]);
+
+    expect(fn () => $finalAcceptance->recordResponse($approver, AcceptanceDecision::Accepted))
+        ->toThrow(ValidationException::class);
+
+    expect($engagement->refresh()->status)->toBe(EngagementStatus::AwaitingFinalAcceptance)
+        ->and($finalAcceptance->refresh()->status)->toBe(FinalAcceptanceStatus::AwaitingResponse);
 });
 
 test('deliverable records of other organizations are hidden', function () {

@@ -84,6 +84,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::post('deliverables/{deliverable}/evidence', [DeliverableEvidenceController::class, 'store'])->name('deliverables.evidence.store');
     Route::delete('deliverables/{deliverable}/evidence/{evidence}', [DeliverableEvidenceController::class, 'destroy'])->scopeBindings()->name('deliverables.evidence.destroy');
     Route::post('deliverables/{deliverable}/submit', [DeliverableSubmissionController::class, 'store'])->name('deliverables.submit');
+    Route::delete('deliverables/{deliverable}/submit', [DeliverableSubmissionController::class, 'destroy'])->name('deliverables.submit.withdraw');
     Route::get('engagements/{engagement}/milestones/{milestone}/acceptance-pack', [MilestoneAcceptancePackController::class, 'show'])->name('engagements.milestones.acceptance-pack');
     Route::post('engagements/{engagement}/final-acceptance', [FinalAcceptanceController::class, 'store'])->name('engagements.final-acceptance.store');
 

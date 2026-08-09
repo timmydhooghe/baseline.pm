@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\AcceptanceDecision;
+use App\Enums\DeliverableStatus;
 use App\Enums\EngagementStatus;
 use App\Enums\FinalAcceptanceStatus;
 use App\Models\Concerns\BelongsToOrganization;
@@ -106,6 +107,19 @@ class FinalAcceptance extends Model
             if (! $this->status->isOpen() || $this->customer_snapshot_id === null) {
                 throw ValidationException::withMessages([
                     'decision' => __('This engagement is no longer awaiting final acceptance.'),
+                ]);
+            }
+
+            /*
+             * Final acceptance signs off the engagement as a whole, so the
+             * whole engagement must still be signed. Scope that arrived after
+             * the freeze — an approved change request — has to be delivered
+             * and accepted on its own before this record can close (FA-24).
+             */
+            if ($decision === AcceptanceDecision::Accepted
+                && $this->engagement->deliverables()->whereNot('status', DeliverableStatus::Accepted)->exists()) {
+                throw ValidationException::withMessages([
+                    'decision' => __('Scope was added after this record was frozen — it no longer covers the engagement and must be resubmitted.'),
                 ]);
             }
 

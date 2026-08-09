@@ -600,6 +600,7 @@ test('the portal records the decision immutably against the frozen snapshot', fu
     $respondUrl = URL::signedRoute('portal.change-requests.respond', [
         'changeRequest' => $changeRequest->id,
         'stakeholder' => $approver->id,
+        'snapshot' => $changeRequest->customer_snapshot_id,
     ]);
 
     $this->post($respondUrl, ['decision' => 'approved', 'comment' => 'Signed off in the portal.'])
@@ -610,6 +611,43 @@ test('the portal records the decision immutably against the frozen snapshot', fu
     expect($changeRequest->status)->toBe(ChangeRequestStatus::Approved)
         ->and($changeRequest->responses->sole()->comment)->toBe('Signed off in the portal.')
         ->and($changeRequest->responses->sole()->stakeholder_name)->toBe('Anders Vik');
+});
+
+test('a superseded proposal link cannot approve the proposal that replaced it', function () {
+    Notification::fake();
+
+    $setup = changeControlSetup();
+    ['manager' => $manager, 'approver' => $approver] = $setup;
+    $changeRequest = priceProposal($setup);
+    $changeRequest->submitToCustomer(today()->addDays(14), $manager);
+
+    // The approver opens the €4,000 proposal and keeps the form.
+    $staleUrl = URL::signedRoute('portal.change-requests.respond', [
+        'changeRequest' => $changeRequest->id,
+        'stakeholder' => $approver->id,
+        'snapshot' => $changeRequest->refresh()->customer_snapshot_id,
+    ]);
+
+    // A clarification reopens the assessment and it comes back repriced.
+    $changeRequest->recordResponse($approver, ChangeRequestDecision::ClarificationRequested, 'What does this cover?');
+    $changeRequest->refresh()->update(['customer_price' => Money::fromCents(900000)]);
+    $changeRequest->moveToProposal($manager);
+    $changeRequest->submitToCustomer(today()->addDays(7), $manager);
+
+    // Approving from the old form would sign €9,000 having read €4,000.
+    $this->post($staleUrl, ['decision' => 'approved'])->assertRedirect();
+
+    expect($changeRequest->refresh()->status)->toBe(ChangeRequestStatus::AwaitingApproval)
+        ->and($changeRequest->responses()->where('decision', ChangeRequestDecision::Approved)->exists())->toBeFalse();
+
+    // The link minted from the current proposal decides it.
+    $this->post(URL::signedRoute('portal.change-requests.respond', [
+        'changeRequest' => $changeRequest->id,
+        'stakeholder' => $approver->id,
+        'snapshot' => $changeRequest->customer_snapshot_id,
+    ]), ['decision' => 'approved'])->assertRedirect();
+
+    expect($changeRequest->refresh()->status)->toBe(ChangeRequestStatus::Approved);
 });
 
 test('reminders go to approvers near the deadline, at most once a day', function () {
