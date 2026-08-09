@@ -2,11 +2,15 @@
 
 namespace App\Models;
 
+use App\Actions\Governance\ProposeDecisionsFromTranscript;
 use App\Enums\BaselineStatus;
 use App\Enums\DeliverableStatus;
+use App\Enums\DependencyParty;
+use App\Enums\DependencyStatus;
 use App\Enums\EngagementStatus;
 use App\Enums\FinalAcceptanceStatus;
 use App\Enums\IntegrationConnectionStatus;
+use App\Enums\RiskStatus;
 use App\Enums\WorkItemSource;
 use App\Jobs\SyncIntegrationConnection;
 use App\Models\Concerns\BelongsToOrganization;
@@ -49,6 +53,9 @@ use LogicException;
  * @property-read Collection<int, Release> $releases
  * @property-read Collection<int, Deliverable> $deliverables
  * @property-read Collection<int, FinalAcceptance> $finalAcceptances
+ * @property-read Collection<int, Decision> $decisions
+ * @property-read Collection<int, Risk> $risks
+ * @property-read Collection<int, Dependency> $dependencies
  */
 #[Fillable(['name'])]
 class Engagement extends Model
@@ -303,11 +310,7 @@ class Engagement extends Model
     ): IntegrationConnection {
         $provider = $account->provider;
 
-        if ($this->status === EngagementStatus::Archived) {
-            throw ValidationException::withMessages([
-                'integration_account_id' => __('Archived engagements are read-only.'),
-            ]);
-        }
+        $this->guardWritable(__('Archived engagements are read-only.'), 'integration_account_id');
 
         $existing = $this->integrationConnections()->firstWhere('provider', $provider);
 
@@ -354,11 +357,7 @@ class Engagement extends Model
      */
     public function addManualWorkItem(array $attributes, ?User $author = null): WorkItem
     {
-        if ($this->status === EngagementStatus::Archived) {
-            throw ValidationException::withMessages([
-                'title' => __('Archived engagements are read-only.'),
-            ]);
-        }
+        $this->guardWritable(__('Archived engagements are read-only.'), 'title');
 
         $workItem = new WorkItem([...$attributes, 'source' => WorkItemSource::Manual, 'created_by' => $author?->id]);
         $workItem->organization_id = $this->organization_id;
@@ -381,11 +380,7 @@ class Engagement extends Model
      */
     public function draftChangeRequest(array $attributes, ?User $author = null): ChangeRequest
     {
-        if ($this->status === EngagementStatus::Archived) {
-            throw ValidationException::withMessages([
-                'title' => __('Archived engagements are read-only.'),
-            ]);
-        }
+        $this->guardWritable(__('Archived engagements are read-only.'), 'title');
 
         $changeRequest = new ChangeRequest([...$attributes, 'created_by' => $author?->id]);
         $changeRequest->organization_id = $this->organization_id;
@@ -399,6 +394,186 @@ class Engagement extends Model
         ]);
 
         return $changeRequest;
+    }
+
+    /**
+     * Record a decision in the ledger (FA-18). Entries start as drafts —
+     * whether typed here or extracted from a transcript — and only enter the
+     * ledger when confirmed, so a half-remembered outcome never becomes
+     * something the engagement is held to.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    public function recordDecision(array $attributes, ?User $author = null): Decision
+    {
+        $this->guardWritable(__('Archived engagements are read-only.'), 'title');
+
+        $decision = new Decision([...$attributes, 'created_by' => $author?->id]);
+        $decision->organization_id = $this->organization_id;
+        $decision->engagement_id = $this->id;
+        $decision->save();
+
+        AuditLog::record('decision.drafted', $decision, [
+            'decision' => $decision->title,
+            'source' => $decision->source->value,
+            'drafted_by' => $author?->name,
+        ]);
+
+        return $decision;
+    }
+
+    /**
+     * Propose decision drafts from a meeting transcript (FA-18). The
+     * extraction proposes, never decides: every result is a draft carrying
+     * the excerpt it came from, and nothing reaches the ledger until a human
+     * reads it and confirms.
+     *
+     * @return Collection<int, Decision>
+     */
+    public function proposeDecisionsFromTranscript(string $transcript, ?User $author = null): Collection
+    {
+        $proposals = app(ProposeDecisionsFromTranscript::class)($transcript);
+
+        return new Collection(array_map(
+            fn (array $attributes): Decision => $this->recordDecision($attributes, $author),
+            $proposals,
+        ));
+    }
+
+    /**
+     * Raise a risk on the register (FA-19), pinning the rate card version its
+     * exposure prices against — the approved baseline's, so risk exposure and
+     * cost budget derive from the same rates. The opening rating is frozen as
+     * the first revision, giving the history something to be read against.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    public function registerRisk(array $attributes, ?User $author = null): Risk
+    {
+        $this->guardWritable(__('Archived engagements are read-only.'), 'title');
+
+        $risk = new Risk([...$attributes, 'created_by' => $author?->id]);
+        $risk->organization_id = $this->organization_id;
+        $risk->engagement_id = $this->id;
+        $pinned = $this->approvedBaseline()?->rate_card_version_id;
+        $risk->rate_card_version_id = $pinned ?? $this->organization->currentRateCardVersion()?->id;
+        $risk->save();
+
+        $risk->recordRevision($author);
+
+        AuditLog::record('risk.registered', $risk, [
+            'risk' => $risk->title,
+            'probability' => $risk->probability->value,
+            'impact' => $risk->impact->value,
+            'score' => $risk->score(),
+            'registered_by' => $author?->name,
+        ]);
+
+        return $risk;
+    }
+
+    /**
+     * Register a dependency (FA-20): something the engagement waits for, owed
+     * by a named person, due on a date.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    public function registerDependency(array $attributes, ?User $author = null): Dependency
+    {
+        $this->guardWritable(__('Archived engagements are read-only.'), 'title');
+
+        $dependency = new Dependency([...$attributes, 'created_by' => $author?->id]);
+        $dependency->organization_id = $this->organization_id;
+        $dependency->engagement_id = $this->id;
+        $dependency->save();
+
+        AuditLog::record('dependency.registered', $dependency, [
+            'dependency' => $dependency->title,
+            'party' => $dependency->party->value,
+            'responsible' => $dependency->responsibleName(),
+            'required_on' => $dependency->required_on->toDateString(),
+            'registered_by' => $author?->name,
+        ]);
+
+        return $dependency;
+    }
+
+    /**
+     * The risks that belong in front of somebody today (FA-19, FA-25): live
+     * high-probability, high-impact entries, plus any live risk whose last
+     * re-rating made it worse. Ordered worst first.
+     *
+     * @return Collection<int, Risk>
+     */
+    public function escalatedRisks(): Collection
+    {
+        return $this->risks()
+            ->whereIn('status', [RiskStatus::Open, RiskStatus::Mitigating])
+            ->with(['revisions', 'exposures.role', 'owner'])
+            ->get()
+            ->filter(fn (Risk $risk): bool => $risk->isEscalated() || $risk->isWorsening())
+            ->sortByDesc(fn (Risk $risk): int => $risk->score())
+            ->values();
+    }
+
+    /**
+     * The engagement's risk exposure (FA-17, FA-19): what the live register
+     * is worth in effort at risk, and the probability-weighted figure that
+     * rolls into the margin risk band. Cost-derived, so internal only.
+     *
+     * @return array{count: int, escalated: int, exposure: Money, weighted: Money}
+     */
+    public function riskExposure(): array
+    {
+        $live = $this->risks()
+            ->whereIn('status', [RiskStatus::Open, RiskStatus::Mitigating])
+            ->with(['revisions', 'exposures.role'])
+            ->get();
+
+        return [
+            'count' => $live->count(),
+            'escalated' => $live->filter(fn (Risk $risk): bool => $risk->isEscalated() || $risk->isWorsening())->count(),
+            'exposure' => $live->reduce(
+                fn (Money $sum, Risk $risk): Money => $sum->add($risk->exposure()),
+                Money::zero(),
+            ),
+            'weighted' => $live->reduce(
+                fn (Money $sum, Risk $risk): Money => $sum->add($risk->weightedExposure()),
+                Money::zero(),
+            ),
+        ];
+    }
+
+    /**
+     * The items the customer still owes (FA-20, FA-27) — the action list the
+     * portal shows them, late ones first.
+     *
+     * @return Collection<int, Dependency>
+     */
+    public function customerOwedDependencies(): Collection
+    {
+        return $this->dependencies()
+            ->where('party', DependencyParty::Customer)
+            ->whereIn('status', [DependencyStatus::Pending, DependencyStatus::Requested, DependencyStatus::Escalated])
+            ->with(['responsibleStakeholder', 'links.affected'])
+            ->orderBy('required_on')
+            ->get();
+    }
+
+    /**
+     * Outstanding dependencies whose required date has passed, whoever owes
+     * them — the register's chase list.
+     *
+     * @return Collection<int, Dependency>
+     */
+    public function lateDependencies(): Collection
+    {
+        return $this->dependencies()
+            ->whereIn('status', [DependencyStatus::Pending, DependencyStatus::Requested, DependencyStatus::Escalated])
+            ->whereDate('required_on', '<', now()->toDateString())
+            ->with(['responsibleStakeholder', 'responsibleUser', 'links.affected'])
+            ->orderBy('required_on')
+            ->get();
     }
 
     /**
@@ -599,6 +774,42 @@ class Engagement extends Model
     public function deliverables(): HasMany
     {
         return $this->hasMany(Deliverable::class);
+    }
+
+    /**
+     * @return HasMany<Decision, $this>
+     */
+    public function decisions(): HasMany
+    {
+        return $this->hasMany(Decision::class);
+    }
+
+    /**
+     * @return HasMany<Risk, $this>
+     */
+    public function risks(): HasMany
+    {
+        return $this->hasMany(Risk::class);
+    }
+
+    /**
+     * @return HasMany<Dependency, $this>
+     */
+    public function dependencies(): HasMany
+    {
+        return $this->hasMany(Dependency::class);
+    }
+
+    /**
+     * Refuse a write to an archived engagement — archived is read-only and
+     * still searchable (FA-3). The message travels under the field the
+     * calling form owns, so the refusal lands where the user is looking.
+     */
+    protected function guardWritable(string $message, string $field): void
+    {
+        if ($this->status === EngagementStatus::Archived) {
+            throw ValidationException::withMessages([$field => $message]);
+        }
     }
 
     /**

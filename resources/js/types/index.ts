@@ -3,6 +3,7 @@ export type * from './baseline';
 export type * from './change-request';
 export type * from './deliverable';
 export type * from './domain';
+export type * from './governance';
 export type * from './integration';
 export type * from './navigation';
 export type * from './ui';

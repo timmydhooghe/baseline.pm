@@ -14,10 +14,14 @@ use Illuminate\Support\Facades\Context;
 use LogicException;
 
 /**
- * Append-only audit trail entry. Updates and deletes are refused at the model level.
+ * Append-only audit trail entry (FA-21). Updates and deletes are refused at
+ * the model level. Every entry names the engagement it belongs to where one
+ * can be resolved, so the trail can be read from the engagement it governs
+ * as well as from the record it is about.
  *
  * @property string $id
  * @property string $organization_id
+ * @property string|null $engagement_id
  * @property string|null $actor_id
  * @property string $action
  * @property string $subject_type
@@ -25,9 +29,10 @@ use LogicException;
  * @property array<string, mixed>|null $payload
  * @property Carbon $created_at
  * @property-read Organization $organization
+ * @property-read Engagement|null $engagement
  * @property-read User|null $actor
  */
-#[Fillable(['organization_id', 'actor_id', 'action', 'subject_type', 'subject_id', 'payload'])]
+#[Fillable(['organization_id', 'engagement_id', 'actor_id', 'action', 'subject_type', 'subject_id', 'payload'])]
 class AuditLog extends Model
 {
     use BelongsToOrganization, HasUuids;
@@ -67,6 +72,7 @@ class AuditLog extends Model
 
         return self::query()->create([
             'organization_id' => $organizationId,
+            'engagement_id' => self::resolveEngagementId($subject),
             'actor_id' => $actor?->getKey(),
             'action' => $action,
             'subject_type' => $subject->getMorphClass(),
@@ -87,6 +93,46 @@ class AuditLog extends Model
         $organizationId = $subject->getAttribute('organization_id') ?? Context::get('organization_id');
 
         return is_string($organizationId) ? $organizationId : null;
+    }
+
+    /**
+     * The engagement whose trail this entry belongs to. Records that carry
+     * the engagement themselves answer directly; records that hang off one
+     * (a baseline item, a role-mix line) inherit it from the parent they
+     * belong to. Organization-level subjects — customers, rate cards,
+     * invitations — legitimately belong to no engagement.
+     */
+    public static function resolveEngagementId(Model $subject): ?string
+    {
+        if ($subject instanceof Engagement) {
+            return $subject->getKey();
+        }
+
+        $engagementId = $subject->getAttribute('engagement_id');
+
+        if (is_string($engagementId)) {
+            return $engagementId;
+        }
+
+        foreach (['baseline', 'changeRequest', 'deliverable', 'risk', 'dependency', 'decision'] as $relation) {
+            if (! $subject->isRelation($relation)) {
+                continue;
+            }
+
+            $parent = $subject->getAttribute($relation);
+
+            return $parent instanceof Model ? self::resolveEngagementId($parent) : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * @return BelongsTo<Engagement, $this>
+     */
+    public function engagement(): BelongsTo
+    {
+        return $this->belongsTo(Engagement::class);
     }
 
     /**

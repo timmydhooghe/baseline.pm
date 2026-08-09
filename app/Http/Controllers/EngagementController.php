@@ -3,10 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ChangeRequestStatus;
+use App\Enums\DecisionStatus;
 use App\Enums\DeliverableStatus;
+use App\Enums\DependencyStatus;
 use App\Enums\EngagementStatus;
+use App\Enums\RecordVisibility;
+use App\Enums\RiskStatus;
 use App\Http\Requests\Engagements\StoreEngagementRequest;
 use App\Http\Requests\Engagements\TransitionEngagementRequest;
+use App\Models\AuditLog;
 use App\Models\Customer;
 use App\Models\Engagement;
 use App\Models\IntegrationConnection;
@@ -171,6 +176,31 @@ class EngagementController extends Controller
                     'decidedBy' => $finalAcceptance->stakeholder_name,
                     'comment' => $finalAcceptance->comment,
                 ],
+            ],
+            'governance' => [
+                'decisions' => [
+                    'total' => $engagement->decisions()->count(),
+                    'drafts' => $engagement->decisions()->where('status', DecisionStatus::Draft)->count(),
+                    'awaitingAcknowledgement' => $engagement->decisions()
+                        ->where('visibility', RecordVisibility::Shared)
+                        ->whereNot('status', DecisionStatus::Draft)
+                        ->whereNull('acknowledged_at')
+                        ->count(),
+                ],
+                'risks' => [
+                    'live' => $engagement->risks()
+                        ->whereIn('status', [RiskStatus::Open, RiskStatus::Mitigating])
+                        ->count(),
+                    'escalated' => $engagement->escalatedRisks()->count(),
+                ],
+                'dependencies' => [
+                    'outstanding' => $engagement->dependencies()
+                        ->whereIn('status', [DependencyStatus::Pending, DependencyStatus::Requested, DependencyStatus::Escalated])
+                        ->count(),
+                    'late' => $engagement->lateDependencies()->count(),
+                    'customerOwed' => $engagement->customerOwedDependencies()->count(),
+                ],
+                'auditEntries' => AuditLog::query()->where('engagement_id', $engagement->id)->count(),
             ],
             'lifecycle' => collect(EngagementStatus::cases())
                 ->map(fn (EngagementStatus $status): array => [

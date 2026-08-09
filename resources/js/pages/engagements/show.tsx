@@ -29,9 +29,13 @@ import {
     index as engagements,
     show as engagementShow,
 } from '@/routes/engagements';
+import { show as auditShow } from '@/routes/engagements/audit';
 import { show as baselineShow } from '@/routes/engagements/baseline';
 import { index as changeRequestsIndex } from '@/routes/engagements/change-requests';
+import { index as decisionsIndex } from '@/routes/engagements/decisions';
 import { index as deliverablesIndex } from '@/routes/engagements/deliverables';
+import { index as dependenciesIndex } from '@/routes/engagements/dependencies';
+import { index as risksIndex } from '@/routes/engagements/risks';
 import { show as workShow } from '@/routes/engagements/work';
 import type {
     BaselineStatus,
@@ -65,12 +69,28 @@ type ChangeControlSummary = {
     awaiting: number;
 };
 
+type GovernanceSummary = {
+    decisions: {
+        total: number;
+        drafts: number;
+        awaitingAcknowledgement: number;
+    };
+    risks: { live: number; escalated: number };
+    dependencies: {
+        outstanding: number;
+        late: number;
+        customerOwed: number;
+    };
+    auditEntries: number;
+};
+
 type Props = {
     engagement: EngagementDetail;
     baseline: BaselineSummary | null;
     work: EngagementWorkSummary;
     changeControl: ChangeControlSummary;
     acceptance: EngagementAcceptanceSummary;
+    governance: GovernanceSummary;
     lifecycle: SelectOption[];
     position: EngagementPositionSummary;
     can: { transition: boolean; viewCustomer: boolean };
@@ -82,6 +102,7 @@ export default function EngagementsShow({
     work,
     changeControl,
     acceptance,
+    governance,
     lifecycle,
     position,
     can,
@@ -438,6 +459,92 @@ export default function EngagementsShow({
                                 'The last final acceptance request was withdrawn.'}
                         </div>
                     )}
+                </div>
+
+                <div
+                    className="border-[1.5px] border-ink dark:border-paper"
+                    data-test="governance-card"
+                >
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b-[1.5px] border-ink px-4 py-3 dark:border-paper">
+                        <span className="font-plex-mono text-[11px] font-semibold tracking-[0.08em] text-stone uppercase dark:text-fog">
+                            Governance ledgers
+                        </span>
+                        <span className="font-plex-mono text-[11px] font-semibold uppercase">
+                            {governance.auditEntries} audited actions
+                        </span>
+                    </div>
+                    <div className="grid divide-ink/15 sm:grid-cols-3 sm:divide-x dark:divide-paper/15">
+                        {[
+                            {
+                                title: 'Decisions',
+                                href: decisionsIndex(engagement.id),
+                                lead: `${governance.decisions.total} on record`,
+                                note:
+                                    governance.decisions.drafts > 0
+                                        ? `${governance.decisions.drafts} draft${governance.decisions.drafts === 1 ? '' : 's'} awaiting confirmation`
+                                        : 'Why the engagement is the way it is.',
+                                warn: governance.decisions.drafts > 0,
+                                test: 'open-decisions',
+                            },
+                            {
+                                title: 'Risks',
+                                href: risksIndex(engagement.id),
+                                lead: `${governance.risks.live} live`,
+                                note:
+                                    governance.risks.escalated > 0
+                                        ? `${governance.risks.escalated} escalated or worsening`
+                                        : 'Rated, owned, and priced from the rate card.',
+                                warn: governance.risks.escalated > 0,
+                                test: 'open-risks',
+                            },
+                            {
+                                title: 'Dependencies',
+                                href: dependenciesIndex(engagement.id),
+                                lead: `${governance.dependencies.outstanding} outstanding`,
+                                note:
+                                    governance.dependencies.late > 0
+                                        ? `${governance.dependencies.late} late · ${governance.dependencies.customerOwed} owed by the customer`
+                                        : `${governance.dependencies.customerOwed} owed by the customer`,
+                                warn: governance.dependencies.late > 0,
+                                test: 'open-dependencies',
+                            },
+                        ].map((ledger) => (
+                            <Link
+                                key={ledger.title}
+                                href={ledger.href}
+                                prefetch
+                                data-test={ledger.test}
+                                className="flex flex-col gap-1 px-4 py-3 transition-colors hover:bg-ink/5 dark:hover:bg-paper/5"
+                            >
+                                <span className="font-plex-mono text-[11px] font-semibold text-stone uppercase dark:text-fog">
+                                    {ledger.title}
+                                </span>
+                                <span className="font-plex-mono text-[18px] font-semibold">
+                                    {ledger.lead}
+                                </span>
+                                <span
+                                    className={cn(
+                                        'text-[12px]',
+                                        ledger.warn
+                                            ? 'font-semibold text-rust'
+                                            : 'text-stone dark:text-fog',
+                                    )}
+                                >
+                                    {ledger.note}
+                                </span>
+                            </Link>
+                        ))}
+                    </div>
+                    <div className="border-t-[1.5px] border-ink px-4 py-3 dark:border-paper">
+                        <Link
+                            href={auditShow(engagement.id)}
+                            prefetch
+                            className="font-plex-mono text-[12px] font-semibold uppercase underline hover:text-rust"
+                            data-test="open-audit-trail"
+                        >
+                            Open the audit trail →
+                        </Link>
+                    </div>
                 </div>
 
                 {canRequestFinalAcceptance && (

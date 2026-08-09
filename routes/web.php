@@ -10,9 +10,15 @@ use App\Http\Controllers\ChangeRequestController;
 use App\Http\Controllers\ChangeRequestProposalController;
 use App\Http\Controllers\ChangeRequestSubmissionController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\DecisionConfirmationController;
+use App\Http\Controllers\DecisionController;
+use App\Http\Controllers\DecisionTranscriptController;
 use App\Http\Controllers\DeliverableController;
 use App\Http\Controllers\DeliverableEvidenceController;
 use App\Http\Controllers\DeliverableSubmissionController;
+use App\Http\Controllers\DependencyController;
+use App\Http\Controllers\DependencyEventController;
+use App\Http\Controllers\EngagementAuditController;
 use App\Http\Controllers\EngagementController;
 use App\Http\Controllers\FinalAcceptanceController;
 use App\Http\Controllers\IntegrationAccountController;
@@ -22,9 +28,12 @@ use App\Http\Controllers\MemberController;
 use App\Http\Controllers\MilestoneAcceptancePackController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\PortalChangeRequestController;
+use App\Http\Controllers\PortalDecisionController;
 use App\Http\Controllers\PortalDeliverableController;
 use App\Http\Controllers\PortalFinalAcceptanceController;
 use App\Http\Controllers\RateCardController;
+use App\Http\Controllers\RiskController;
+use App\Http\Controllers\RiskExposureController;
 use App\Http\Controllers\StakeholderController;
 use App\Http\Controllers\TriageController;
 use App\Http\Controllers\WorkController;
@@ -88,6 +97,28 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('engagements/{engagement}/milestones/{milestone}/acceptance-pack', [MilestoneAcceptancePackController::class, 'show'])->name('engagements.milestones.acceptance-pack');
     Route::post('engagements/{engagement}/final-acceptance', [FinalAcceptanceController::class, 'store'])->name('engagements.final-acceptance.store');
 
+    Route::get('engagements/{engagement}/decisions', [DecisionController::class, 'index'])->name('engagements.decisions.index');
+    Route::post('engagements/{engagement}/decisions', [DecisionController::class, 'store'])->name('engagements.decisions.store');
+    Route::post('engagements/{engagement}/decisions/transcript', [DecisionTranscriptController::class, 'store'])->name('engagements.decisions.transcript');
+    Route::get('decisions/{decision}', [DecisionController::class, 'show'])->name('decisions.show');
+    Route::patch('decisions/{decision}', [DecisionController::class, 'update'])->name('decisions.update');
+    Route::delete('decisions/{decision}', [DecisionController::class, 'destroy'])->name('decisions.destroy');
+    Route::post('decisions/{decision}/confirm', [DecisionConfirmationController::class, 'store'])->name('decisions.confirm');
+
+    Route::get('engagements/{engagement}/risks', [RiskController::class, 'index'])->name('engagements.risks.index');
+    Route::post('engagements/{engagement}/risks', [RiskController::class, 'store'])->name('engagements.risks.store');
+    Route::get('risks/{risk}', [RiskController::class, 'show'])->name('risks.show');
+    Route::patch('risks/{risk}', [RiskController::class, 'update'])->name('risks.update');
+    Route::put('risks/{risk}/exposure', [RiskExposureController::class, 'update'])->name('risks.exposure.update');
+
+    Route::get('engagements/{engagement}/dependencies', [DependencyController::class, 'index'])->name('engagements.dependencies.index');
+    Route::post('engagements/{engagement}/dependencies', [DependencyController::class, 'store'])->name('engagements.dependencies.store');
+    Route::get('dependencies/{dependency}', [DependencyController::class, 'show'])->name('dependencies.show');
+    Route::patch('dependencies/{dependency}', [DependencyController::class, 'update'])->name('dependencies.update');
+    Route::post('dependencies/{dependency}/events', [DependencyEventController::class, 'store'])->name('dependencies.events.store');
+
+    Route::get('engagements/{engagement}/audit', [EngagementAuditController::class, 'show'])->name('engagements.audit.show');
+
     Route::get('customers', [CustomerController::class, 'index'])->name('customers.index');
     Route::post('customers', [CustomerController::class, 'store'])->name('customers.store');
     Route::get('customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
@@ -145,6 +176,10 @@ Route::prefix('portal')->name('portal.')->group(function (): void {
         Route::post('final-acceptances/{finalAcceptance}/review/{stakeholder}', [PortalFinalAcceptanceController::class, 'store'])
             ->middleware('throttle:10,1')
             ->name('final-acceptances.respond');
+        Route::get('decisions/{decision}/acknowledge/{stakeholder}', [PortalDecisionController::class, 'show'])->name('decisions.show');
+        Route::post('decisions/{decision}/acknowledge/{stakeholder}', [PortalDecisionController::class, 'store'])
+            ->middleware('throttle:10,1')
+            ->name('decisions.acknowledge');
     });
 });
 
