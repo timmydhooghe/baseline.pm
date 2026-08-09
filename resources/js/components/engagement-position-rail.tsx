@@ -64,14 +64,15 @@ export default function EngagementPositionRail({
                         hasRisk && 'text-rust',
                     )}
                 >
-                    {risk.price.formatted}
-                    {risk.unpriced > 0 && '+'}
+                    {risk.price === null
+                        ? '€ —'
+                        : `${risk.price.formatted}${risk.unpriced > 0 ? '+' : ''}`}
                 </div>
                 <div className="mt-1 text-[11px] text-stone dark:text-fog">
                     {risk.count === 0
                         ? 'No unresolved drift'
                         : `${risk.count} unresolved ${risk.count === 1 ? 'item' : 'items'}${
-                              risk.unpriced > 0
+                              risk.price !== null && risk.unpriced > 0
                                   ? ` · ${risk.unpriced} unpriced`
                                   : ''
                           }`}
