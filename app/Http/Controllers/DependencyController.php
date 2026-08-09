@@ -6,6 +6,7 @@ use App\Actions\Governance\LinkableRecords;
 use App\Enums\DependencyEventType;
 use App\Http\Requests\Dependencies\StoreDependencyRequest;
 use App\Http\Requests\Dependencies\UpdateDependencyRequest;
+use App\Models\AuditLog;
 use App\Models\Dependency;
 use App\Models\DependencyEvent;
 use App\Models\DependencyLink;
@@ -52,6 +53,7 @@ class DependencyController extends Controller
                 'outstanding' => $outstanding->count(),
                 'late' => $outstanding->filter(fn (Dependency $dependency): bool => $dependency->isLate())->count(),
                 'customerOwed' => $outstanding->filter(fn (Dependency $dependency): bool => $dependency->party->isCustomer())->count(),
+                'unowned' => $outstanding->filter(fn (Dependency $dependency): bool => $dependency->needsReassignment())->count(),
                 'worstDelayDays' => (int) $outstanding->max(fn (Dependency $dependency): int => $dependency->delayDays()),
             ],
             'options' => $this->options($engagement),
@@ -128,7 +130,7 @@ class DependencyController extends Controller
         }
 
         $dependency = $engagement->registerDependency($this->attributes($validated), $user);
-        $dependency->syncLinks(LinkableRecords::targets($validated['links'] ?? []));
+        $dependency->syncLinks(LinkableRecords::targets($validated['links'] ?? []), $user);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Dependency :title registered, owed by :who.', [
             'title' => $dependency->title,
@@ -141,9 +143,24 @@ class DependencyController extends Controller
     public function update(UpdateDependencyRequest $request, Dependency $dependency): RedirectResponse
     {
         $validated = $request->validated();
+        $user = $request->user();
+        $actor = $user instanceof User ? $user : null;
 
-        $dependency->update($this->attributes($validated));
-        $dependency->syncLinks(LinkableRecords::targets($validated['links'] ?? []));
+        $dependency->fill($this->attributes($validated));
+        $changes = collect($dependency->getDirty())->except('updated_at')->keys()->all();
+        $dependency->save();
+
+        if ($changes !== []) {
+            AuditLog::record('dependency.updated', $dependency, [
+                'dependency' => $dependency->title,
+                'changed' => $changes,
+                'required_on' => $dependency->required_on->toDateString(),
+                'responsible' => $dependency->responsibleName(),
+                'updated_by' => $actor?->name,
+            ]);
+        }
+
+        $dependency->syncLinks(LinkableRecords::targets($validated['links'] ?? []), $actor);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Dependency updated.')]);
 
@@ -163,6 +180,7 @@ class DependencyController extends Controller
             'status' => $dependency->status->value,
             'statusLabel' => $dependency->status->label(),
             'responsibleName' => $dependency->responsibleName(),
+            'needsReassignment' => $dependency->needsReassignment(),
             'responsibleStakeholderId' => $dependency->responsible_stakeholder_id,
             'responsibleUserId' => $dependency->responsible_user_id,
             'requiredOn' => $dependency->required_on->toFormattedDateString(),

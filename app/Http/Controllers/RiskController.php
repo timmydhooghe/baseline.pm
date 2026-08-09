@@ -151,7 +151,7 @@ class RiskController extends Controller
         }
 
         $risk = $engagement->registerRisk($this->attributes($validated), $user);
-        $risk->syncLinks(LinkableRecords::targets($validated['links'] ?? []));
+        $risk->syncLinks(LinkableRecords::targets($validated['links'] ?? []), $user);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Risk :title on the register.', [
             'title' => $risk->title,
@@ -174,7 +174,7 @@ class RiskController extends Controller
         }
 
         $risk->reassess($this->attributes($validated), $user, $validated['note'] ?? null);
-        $risk->syncLinks(LinkableRecords::targets($validated['links'] ?? []));
+        $risk->syncLinks(LinkableRecords::targets($validated['links'] ?? []), $user);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Risk updated — now :probability × :impact.', [
             'probability' => $risk->probability->label(),

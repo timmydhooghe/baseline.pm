@@ -170,6 +170,8 @@ export type DependencyListItem = {
     status: DependencyStatus;
     statusLabel: string;
     responsibleName: string | null;
+    /** An outstanding item whose responsible person was removed. */
+    needsReassignment: boolean;
     responsibleStakeholderId: string | null;
     responsibleUserId: string | null;
     requiredOn: string;

@@ -31,7 +31,9 @@ class UpdateDecisionRequest extends StoreDecisionRequest
     {
         $decision = $this->route('decision');
 
-        return $this->decisionRules($decision instanceof Decision ? $decision->engagement : null);
+        $decision = $decision instanceof Decision ? $decision : null;
+
+        return $this->decisionRules($decision?->engagement, $decision);
     }
 
     /**

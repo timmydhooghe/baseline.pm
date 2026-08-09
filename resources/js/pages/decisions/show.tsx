@@ -5,6 +5,7 @@ import DecisionController from '@/actions/App/Http/Controllers/DecisionControlle
 import InputError from '@/components/input-error';
 import LinkedRecordsField from '@/components/linked-records-field';
 import RecordChipList from '@/components/record-chip-list';
+import StructuredRowsField from '@/components/structured-rows-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -398,6 +399,64 @@ export default function DecisionsShow({
                                                 />
                                             </div>
                                         )}
+                                    <StructuredRowsField
+                                        name="alternatives"
+                                        label="Alternatives considered"
+                                        addLabel="Add an alternative"
+                                        columns={[
+                                            {
+                                                key: 'option',
+                                                label: 'Option',
+                                                placeholder:
+                                                    'e.g. Build SSO now',
+                                                required: true,
+                                            },
+                                            {
+                                                key: 'why_not',
+                                                label: 'Why it lost',
+                                                placeholder:
+                                                    'e.g. Three days we do not have',
+                                            },
+                                        ]}
+                                        defaultRows={decision.alternatives}
+                                    />
+                                    <StructuredRowsField
+                                        name="participants"
+                                        label="Participants"
+                                        addLabel="Add a participant"
+                                        columns={[
+                                            {
+                                                key: 'name',
+                                                label: 'Name',
+                                                required: true,
+                                            },
+                                            {
+                                                key: 'affiliation',
+                                                label: 'Affiliation',
+                                                placeholder:
+                                                    'Which side of the table',
+                                            },
+                                        ]}
+                                        defaultRows={decision.participants}
+                                    />
+                                    <StructuredRowsField
+                                        name="evidence"
+                                        label="Evidence"
+                                        addLabel="Add evidence"
+                                        columns={[
+                                            {
+                                                key: 'label',
+                                                label: 'Label',
+                                                required: true,
+                                            },
+                                            {
+                                                key: 'url',
+                                                label: 'Link',
+                                                placeholder: 'https://…',
+                                            },
+                                        ]}
+                                        defaultRows={decision.evidence}
+                                    />
                                     <LinkedRecordsField
                                         records={options.records}
                                         defaultSelected={decision.links}

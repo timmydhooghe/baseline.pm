@@ -14,6 +14,7 @@ use App\Models\Risk;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Rules\LinkedGovernanceRecords;
+use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Http\FormRequest;
@@ -71,7 +72,7 @@ class StoreDecisionRequest extends FormRequest
      *
      * @return array<string, ValidationRule|array<mixed>|string>
      */
-    protected function decisionRules(?Engagement $engagement): array
+    protected function decisionRules(?Engagement $engagement, ?Decision $decision = null): array
     {
         return [
             'title' => ['required', 'string', 'max:200'],
@@ -86,6 +87,14 @@ class StoreDecisionRequest extends FormRequest
             'evidence' => ['nullable', 'list'],
             'evidence.*.label' => ['required', 'string', 'max:255'],
             'evidence.*.url' => ['nullable', 'url', 'max:2048'],
+            /*
+             * A form that removed the last row of a structured list has to
+             * say so out loud: an absent list means "unchanged", so without
+             * these flags the last alternative could never be deleted.
+             */
+            'alternatives_cleared' => ['sometimes', 'boolean'],
+            'participants_cleared' => ['sometimes', 'boolean'],
+            'evidence_cleared' => ['sometimes', 'boolean'],
             'impact_scope' => ['nullable', 'string', 'max:2000'],
             'impact_budget' => ['nullable', 'numeric', 'decimal:0,2', 'min:-100000000', 'max:100000000'],
             'impact_timeline_days' => ['nullable', 'integer', 'between:-3650,3650'],
@@ -101,7 +110,23 @@ class StoreDecisionRequest extends FormRequest
                 'uuid',
                 Rule::exists(Decision::class, 'id')
                     ->where('engagement_id', $engagement?->id)
-                    ->whereNot('status', DecisionStatus::Draft->value),
+                    ->where('status', DecisionStatus::Confirmed->value),
+                function (string $attribute, mixed $value, Closure $fail) use ($decision): void {
+                    /*
+                     * The supersedes reference is unique, so a second draft
+                     * claiming the same predecessor would only fail at
+                     * confirmation time — as a database error rather than
+                     * something the author can act on.
+                     */
+                    $claimed = Decision::query()
+                        ->where('supersedes_id', $value)
+                        ->when($decision !== null, fn ($query) => $query->whereKeyNot($decision?->id))
+                        ->first();
+
+                    if ($claimed !== null) {
+                        $fail(__('That decision is already superseded by :title.', ['title' => $claimed->title]));
+                    }
+                },
             ],
             'links' => ['nullable', new LinkedGovernanceRecords($engagement, self::LINKABLE)],
         ];
@@ -115,7 +140,7 @@ class StoreDecisionRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'supersedes_id.exists' => __('A decision can only supersede a confirmed decision on this engagement.'),
+            'supersedes_id.exists' => __('A decision can only supersede a confirmed decision on this engagement that nothing has replaced yet.'),
             'decided_by.exists' => __('The decision owner must be a member of your organization.'),
         ];
     }

@@ -7,6 +7,7 @@ use App\Enums\DecisionStatus;
 use App\Enums\RecordVisibility;
 use App\Http\Requests\Decisions\StoreDecisionRequest;
 use App\Http\Requests\Decisions\UpdateDecisionRequest;
+use App\Models\AuditLog;
 use App\Models\Decision;
 use App\Models\DecisionLink;
 use App\Models\Engagement;
@@ -157,7 +158,7 @@ class DecisionController extends Controller
         }
 
         $decision = $engagement->recordDecision($this->attributes($validated), $user);
-        $decision->syncLinks($this->linkTargets($validated));
+        $decision->syncLinks($this->linkTargets($validated), $user);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Decision draft :title recorded.', [
             'title' => $decision->title,
@@ -172,9 +173,21 @@ class DecisionController extends Controller
     public function update(UpdateDecisionRequest $request, Decision $decision): RedirectResponse
     {
         $validated = $request->validated();
+        $user = $request->user();
 
-        $decision->update($this->attributes($validated));
-        $decision->syncLinks($this->linkTargets($validated));
+        $decision->fill($this->attributes($validated, $decision));
+        $changes = collect($decision->getDirty())->except('updated_at')->keys()->all();
+        $decision->save();
+
+        if ($changes !== []) {
+            AuditLog::record('decision.updated', $decision, [
+                'decision' => $decision->title,
+                'changed' => $changes,
+                'updated_by' => $user?->name,
+            ]);
+        }
+
+        $decision->syncLinks($this->linkTargets($validated), $user instanceof User ? $user : null);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Decision draft updated.')]);
 
@@ -189,6 +202,12 @@ class DecisionController extends Controller
         Gate::authorize('delete', $decision);
 
         $engagement = $decision->engagement;
+
+        AuditLog::record('decision.draft_discarded', $decision, [
+            'decision' => $decision->title,
+            'discarded_by' => $request->user()?->name,
+        ]);
+
         $decision->delete();
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Decision draft discarded.')]);
@@ -275,8 +294,9 @@ class DecisionController extends Controller
                 ->map(fn (User $member): array => ['value' => $member->id, 'label' => $member->name])
                 ->values(),
             'supersedable' => $engagement->decisions()
-                ->whereNot('status', DecisionStatus::Draft)
+                ->where('status', DecisionStatus::Confirmed)
                 ->whereKeyNot($decision->id)
+                ->whereDoesntHave('supersededBy', fn (Builder $claimant) => $claimant->whereKeyNot($decision->id))
                 ->orderByDesc('decided_on')
                 ->get()
                 ->map(fn (Decision $candidate): array => [
@@ -295,7 +315,7 @@ class DecisionController extends Controller
      * @param  array<string, mixed>  $validated
      * @return array<string, mixed>
      */
-    private function attributes(array $validated): array
+    private function attributes(array $validated, ?Decision $decision = null): array
     {
         $budget = $validated['impact_budget'] ?? null;
 
@@ -303,9 +323,16 @@ class DecisionController extends Controller
             'title' => $validated['title'],
             'context' => $validated['context'],
             'decision' => $validated['decision'] ?? null,
-            'alternatives' => array_values($validated['alternatives'] ?? []),
-            'participants' => array_values($validated['participants'] ?? []),
-            'evidence' => array_values($validated['evidence'] ?? []),
+            /*
+             * A form that carries none of these rows is saying "unchanged",
+             * not "delete them": an empty list arrives as the explicit
+             * `*_cleared` flag instead. Without the distinction, adding the
+             * outcome to a transcript-proposed draft would quietly erase the
+             * participants it extracted.
+             */
+            'alternatives' => $this->structured($validated, $decision, 'alternatives'),
+            'participants' => $this->structured($validated, $decision, 'participants'),
+            'evidence' => $this->structured($validated, $decision, 'evidence'),
             'impact_scope' => $validated['impact_scope'] ?? null,
             'impact_budget' => $budget === null ? null : Money::fromCents((int) round((float) $budget * 100)),
             'impact_timeline_days' => $validated['impact_timeline_days'] ?? null,
@@ -314,6 +341,27 @@ class DecisionController extends Controller
             'decided_by' => $validated['decided_by'] ?? null,
             'supersedes_id' => $validated['supersedes_id'] ?? null,
         ];
+    }
+
+    /**
+     * One structured list on the record: the submitted rows when the form
+     * carried them, an empty list when it says so explicitly, and what is
+     * already stored when the form never mentioned them.
+     *
+     * @param  array<string, mixed>  $validated
+     * @return list<array<string, mixed>>
+     */
+    private function structured(array $validated, ?Decision $decision, string $key): array
+    {
+        if (array_key_exists($key, $validated) && is_array($validated[$key])) {
+            return array_values($validated[$key]);
+        }
+
+        if (($validated["{$key}_cleared"] ?? false) === true) {
+            return [];
+        }
+
+        return array_values($decision?->getAttribute($key) ?? []);
     }
 
     /**

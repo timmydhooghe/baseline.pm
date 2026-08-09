@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\DecisionStatus;
 use App\Models\Decision;
 use App\Models\Snapshot;
 use App\Models\Stakeholder;
@@ -28,6 +29,8 @@ class PortalDecisionController extends Controller
         $this->authorizeStakeholder($decision, $stakeholder);
 
         $snapshot = $this->signedSnapshot($request, $decision);
+        $superseded = $decision->status === DecisionStatus::Superseded
+            || $snapshot->id !== $decision->customer_snapshot_id;
 
         return Inertia::render('portal/decision', [
             'record' => $snapshot->payload,
@@ -40,9 +43,8 @@ class PortalDecisionController extends Controller
             'stakeholder' => [
                 'name' => $stakeholder->name,
             ],
-            'superseded' => $snapshot->id !== $decision->customer_snapshot_id,
-            'canAcknowledge' => $snapshot->id === $decision->customer_snapshot_id
-                && $decision->acknowledged_at === null,
+            'superseded' => $superseded,
+            'canAcknowledge' => ! $superseded && $decision->acknowledged_at === null,
             'acknowledgeUrl' => URL::signedRoute('portal.decisions.acknowledge', [
                 'decision' => $decision->id,
                 'stakeholder' => $stakeholder->id,
@@ -60,7 +62,11 @@ class PortalDecisionController extends Controller
 
         $snapshot = $this->signedSnapshot($request, $decision);
 
-        abort_unless($snapshot->id === $decision->customer_snapshot_id, 404);
+        abort_unless(
+            $snapshot->id === $decision->customer_snapshot_id
+            && $decision->status === DecisionStatus::Confirmed,
+            404,
+        );
 
         $validated = $request->validate([
             'comment' => ['nullable', 'string', 'max:2000'],

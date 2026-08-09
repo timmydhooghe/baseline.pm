@@ -15,6 +15,12 @@ use Illuminate\Support\Facades\Schema;
  * `settled_on` is the day the item stopped being outstanding — the day it
  * arrived, or the day it was waived. It is what stops the delay clock; the
  * status says which of the two happened.
+ *
+ * `responsible_name` denormalizes who owed it. Removing a colleague or a
+ * stakeholder nulls the reference, and a register entry that forgot whose
+ * item it was would falsify the very attribution it exists to defend — the
+ * snapshot keeps the record readable, and outstanding items whose person is
+ * gone surface for reassignment.
  */
 return new class extends Migration
 {
@@ -29,6 +35,7 @@ return new class extends Migration
             $table->string('party');
             $table->foreignUuid('responsible_stakeholder_id')->nullable()->constrained('stakeholders')->nullOnDelete();
             $table->foreignUuid('responsible_user_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->string('responsible_name');
             $table->date('required_on');
             $table->string('status');
             $table->date('settled_on')->nullable();

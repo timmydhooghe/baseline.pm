@@ -35,4 +35,27 @@ enum DependencyStatus: string
     {
         return in_array($this, [self::Pending, self::Requested, self::Escalated], true);
     }
+
+    /**
+     * How far along the chase this state sits. Settling ranks above every
+     * outstanding state, and received and waived rank alike: both end it.
+     */
+    public function rank(): int
+    {
+        return match ($this) {
+            self::Pending => 0,
+            self::Requested => 1,
+            self::Escalated => 2,
+            self::Received, self::Waived => 3,
+        };
+    }
+
+    /**
+     * Whether moving to the given state would advance the chase rather than
+     * walk it backwards.
+     */
+    public function precedes(self $other): bool
+    {
+        return $this->rank() < $other->rank();
+    }
 }

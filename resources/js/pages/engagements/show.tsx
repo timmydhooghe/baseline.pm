@@ -93,7 +93,7 @@ type Props = {
     governance: GovernanceSummary;
     lifecycle: SelectOption[];
     position: EngagementPositionSummary;
-    can: { transition: boolean; viewCustomer: boolean };
+    can: { transition: boolean; viewCustomer: boolean; viewAudit: boolean };
 };
 
 export default function EngagementsShow({
@@ -469,9 +469,11 @@ export default function EngagementsShow({
                         <span className="font-plex-mono text-[11px] font-semibold tracking-[0.08em] text-stone uppercase dark:text-fog">
                             Governance ledgers
                         </span>
-                        <span className="font-plex-mono text-[11px] font-semibold uppercase">
-                            {governance.auditEntries} audited actions
-                        </span>
+                        {can.viewAudit && (
+                            <span className="font-plex-mono text-[11px] font-semibold uppercase">
+                                {governance.auditEntries} audited actions
+                            </span>
+                        )}
                     </div>
                     <div className="grid divide-ink/15 sm:grid-cols-3 sm:divide-x dark:divide-paper/15">
                         {[
@@ -535,16 +537,18 @@ export default function EngagementsShow({
                             </Link>
                         ))}
                     </div>
-                    <div className="border-t-[1.5px] border-ink px-4 py-3 dark:border-paper">
-                        <Link
-                            href={auditShow(engagement.id)}
-                            prefetch
-                            className="font-plex-mono text-[12px] font-semibold uppercase underline hover:text-rust"
-                            data-test="open-audit-trail"
-                        >
-                            Open the audit trail →
-                        </Link>
-                    </div>
+                    {can.viewAudit && (
+                        <div className="border-t-[1.5px] border-ink px-4 py-3 dark:border-paper">
+                            <Link
+                                href={auditShow(engagement.id)}
+                                prefetch
+                                className="font-plex-mono text-[12px] font-semibold uppercase underline hover:text-rust"
+                                data-test="open-audit-trail"
+                            >
+                                Open the audit trail →
+                            </Link>
+                        </div>
+                    )}
                 </div>
 
                 {canRequestFinalAcceptance && (

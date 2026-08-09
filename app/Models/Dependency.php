@@ -41,6 +41,7 @@ use LogicException;
  * @property DependencyParty $party
  * @property string|null $responsible_stakeholder_id
  * @property string|null $responsible_user_id
+ * @property string $responsible_name
  * @property CarbonImmutable $required_on
  * @property DependencyStatus $status
  * @property CarbonImmutable|null $settled_on
@@ -79,17 +80,24 @@ class Dependency extends Model
     protected static function booted(): void
     {
         static::saving(function (Dependency $dependency): void {
-            /*
-             * A dependency nobody owns cannot be chased, and an item owed by
-             * the customer that is not shared would never reach their action
-             * list. Both are the difference between a register and a to-do
-             * list nobody reads.
-             */
-            $responsible = $dependency->party->isCustomer()
-                ? $dependency->responsible_stakeholder_id
-                : $dependency->responsible_user_id;
+            $person = $dependency->resolveResponsiblePerson();
 
-            if ($responsible === null) {
+            /*
+             * The name is denormalized on every write, so the record keeps
+             * naming who owed it even after that person leaves the
+             * organization or the customer's contact list.
+             */
+            if ($person !== null) {
+                $dependency->responsible_name = $person->name;
+            }
+
+            /*
+             * An outstanding item nobody owns cannot be chased — that is the
+             * difference between a register and a to-do list nobody reads.
+             * A settled item keeps only its snapshot: closing out work whose
+             * owner has since left must not require inventing a new one.
+             */
+            if ($person === null && $dependency->status->isOutstanding()) {
                 throw ValidationException::withMessages([
                     'responsible' => $dependency->party->isCustomer()
                         ? __('Name the customer stakeholder who owes this — "the client" cannot be chased.')
@@ -147,7 +155,17 @@ class Dependency extends Model
             $event->dependency_id = $this->id;
             $event->save();
 
+            /*
+             * The trail records everything, but the register only moves
+             * forward: a request logged after an escalation is still
+             * evidence of chasing, and must not quietly demote the item to
+             * "requested" while the escalation stamp stays on the record.
+             */
             $status = $type->resultingStatus();
+
+            if ($status !== null && ! $this->status->precedes($status)) {
+                $status = null;
+            }
 
             if ($status !== null) {
                 $this->status = $status;
@@ -188,8 +206,10 @@ class Dependency extends Model
      *
      * @param  list<array{type: string, id: string}>  $targets
      */
-    public function syncLinks(array $targets): void
+    public function syncLinks(array $targets, ?User $actor = null): void
     {
+        $before = $this->linkTitles();
+
         DB::transaction(function () use ($targets): void {
             $this->links()->delete();
 
@@ -203,6 +223,31 @@ class Dependency extends Model
         });
 
         $this->unsetRelation('links');
+
+        $after = $this->linkTitles();
+
+        if ($before !== $after) {
+            AuditLog::record('dependency.links_updated', $this, [
+                'dependency' => $this->title,
+                'from' => $before,
+                'to' => $after,
+                'updated_by' => $actor?->name,
+            ]);
+        }
+    }
+
+    /**
+     * The blocked records by name, ordered, so a change to the set can be
+     * compared and read back in the trail.
+     *
+     * @return list<string>
+     */
+    private function linkTitles(): array
+    {
+        return array_values($this->links
+            ->map(fn (DependencyLink $link): string => $link->describe()['title'])
+            ->sort()
+            ->all());
     }
 
     /**
@@ -256,13 +301,25 @@ class Dependency extends Model
 
         $impact = $this->links
             ->map(function (DependencyLink $link) use ($delay): array {
+                /*
+                 * A milestone is dated by the baseline; a deliverable record
+                 * is dated by its own forecast, falling back to the
+                 * milestone it is assigned to. Either way the dependency
+                 * pushes that date out day for day.
+                 */
                 $record = $link->linkedRecord();
-                $baselineDate = $record instanceof BaselineItem ? $record->baseline_date : null;
+
+                $dated = match (true) {
+                    $record instanceof BaselineItem => $record->baseline_date,
+                    $record instanceof Deliverable => $record->forecast_date
+                        ?? $record->milestoneItem?->baseline_date,
+                    default => null,
+                };
 
                 return [
                     'record' => $link->describe(),
-                    'baseline_date' => $baselineDate?->toDateString(),
-                    'projected_date' => $baselineDate?->copy()->addDays($delay)->toDateString(),
+                    'baseline_date' => $dated?->toDateString(),
+                    'projected_date' => $dated?->copy()->addDays($delay)->toDateString(),
                 ];
             })
             ->values()
@@ -320,13 +377,44 @@ class Dependency extends Model
     }
 
     /**
-     * The person who owes the item, whichever side they sit on.
+     * The person who owes the item, whichever side they sit on — read from
+     * the snapshot, so a record whose owner has since been removed still
+     * says whose item it was.
      */
     public function responsibleName(): ?string
     {
-        return $this->party->isCustomer()
-            ? $this->responsibleStakeholder?->name
-            : $this->responsibleUser?->name;
+        return $this->responsible_name;
+    }
+
+    /**
+     * Whether an outstanding item lost the person who owed it, because that
+     * colleague or contact was removed. The record keeps their name; the
+     * chase needs a new owner.
+     */
+    public function needsReassignment(): bool
+    {
+        $responsibleId = $this->party->isCustomer()
+            ? $this->responsible_stakeholder_id
+            : $this->responsible_user_id;
+
+        return $responsibleId === null && $this->status->isOutstanding();
+    }
+
+    /**
+     * The responsible person as they exist right now, read fresh so a
+     * just-changed reference is never answered from a stale relation.
+     */
+    protected function resolveResponsiblePerson(): Stakeholder|User|null
+    {
+        if ($this->party->isCustomer()) {
+            return $this->responsible_stakeholder_id === null
+                ? null
+                : Stakeholder::query()->find($this->responsible_stakeholder_id);
+        }
+
+        return $this->responsible_user_id === null
+            ? null
+            : User::query()->find($this->responsible_user_id);
     }
 
     /**

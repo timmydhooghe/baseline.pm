@@ -118,9 +118,28 @@ class Risk extends Model
                 $this->closed_at = now();
             }
 
+            $edits = collect($this->getDirty())
+                ->except(['probability', 'impact', 'status', 'closed_at', 'updated_at'])
+                ->all();
+
             $this->save();
 
+            /*
+             * The rating did not move, but somebody rewrote the entry — a new
+             * owner, a mitigation plan, a change of visibility. FA-21 asks the
+             * trail to carry every governance action, so an edit that appends
+             * no revision still appends an entry.
+             */
             if (! $rated && ! $moved) {
+                if ($edits !== []) {
+                    AuditLog::record('risk.updated', $this, [
+                        'risk' => $this->title,
+                        'changes' => $edits,
+                        'note' => $note,
+                        'updated_by' => $actor?->name,
+                    ]);
+                }
+
                 return;
             }
 
@@ -140,6 +159,7 @@ class Risk extends Model
                 ],
                 'score' => $this->score(),
                 'weighted_exposure' => $this->weightedExposure()->format(),
+                'changes' => $edits,
                 'note' => $note,
                 'reassessed_by' => $actor?->name,
             ]);
@@ -211,8 +231,10 @@ class Risk extends Model
      *
      * @param  list<array{type: string, id: string}>  $targets
      */
-    public function syncLinks(array $targets): void
+    public function syncLinks(array $targets, ?User $actor = null): void
     {
+        $before = $this->linkTitles();
+
         DB::transaction(function () use ($targets): void {
             $this->links()->delete();
 
@@ -226,6 +248,31 @@ class Risk extends Model
         });
 
         $this->unsetRelation('links');
+
+        $after = $this->linkTitles();
+
+        if ($before !== $after) {
+            AuditLog::record('risk.links_updated', $this, [
+                'risk' => $this->title,
+                'from' => $before,
+                'to' => $after,
+                'updated_by' => $actor?->name,
+            ]);
+        }
+    }
+
+    /**
+     * The threatened records by name, ordered, so a change to the set can be
+     * compared and read back in the trail.
+     *
+     * @return list<string>
+     */
+    private function linkTitles(): array
+    {
+        return array_values($this->links
+            ->map(fn (RiskLink $link): string => $link->describe()['title'])
+            ->sort()
+            ->all());
     }
 
     /**

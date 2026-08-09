@@ -211,6 +211,7 @@ class EngagementController extends Controller
             'can' => [
                 'transition' => $request->user()?->can('transition', $engagement) ?? false,
                 'viewCustomer' => $request->user()?->can('view', $engagement->customer) ?? false,
+                'viewAudit' => $request->user()?->can('viewAny', AuditLog::class) ?? false,
             ],
         ]);
     }

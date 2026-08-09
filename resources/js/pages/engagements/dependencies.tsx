@@ -40,6 +40,7 @@ type Props = {
         outstanding: number;
         late: number;
         customerOwed: number;
+        unowned: number;
         worstDelayDays: number;
     };
     options: GovernanceOptions;
@@ -424,6 +425,12 @@ export default function EngagementDependencies({
                                                 <span className="block font-plex-mono text-[11px] text-stone uppercase dark:text-fog">
                                                     {dependency.partyLabel}
                                                 </span>
+                                                {dependency.needsReassignment && (
+                                                    <span className="mt-1 inline-block border border-rust px-1.5 py-0.5 font-plex-mono text-[10px] font-semibold text-rust uppercase">
+                                                        No longer on record —
+                                                        reassign
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="px-4 py-2 font-plex-mono">
                                                 {dependency.requiredOn}

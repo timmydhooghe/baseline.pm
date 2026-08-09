@@ -213,9 +213,11 @@ class Decision extends Model
                 throw new LogicException('This stakeholder does not belong to the engagement customer.');
             }
 
-            if (! $this->status->isConfirmed() || ! $this->visibility->isShared()) {
+            if ($this->status !== DecisionStatus::Confirmed || ! $this->visibility->isShared()) {
                 throw ValidationException::withMessages([
-                    'acknowledgement' => __('Only a confirmed decision shared with the customer can be acknowledged.'),
+                    'acknowledgement' => $this->status === DecisionStatus::Superseded
+                        ? __('This decision has been replaced by a later one — there is nothing left to acknowledge here.')
+                        : __('Only a confirmed decision shared with the customer can be acknowledged.'),
                 ]);
             }
 
@@ -247,11 +249,13 @@ class Decision extends Model
      *
      * @param  list<array{type: string, id: string}>  $targets
      */
-    public function syncLinks(array $targets): void
+    public function syncLinks(array $targets, ?User $actor = null): void
     {
         if (! $this->status->acceptsEdits()) {
             throw new LogicException('Linked records can only change while the decision is a draft.');
         }
+
+        $before = $this->linkTitles();
 
         DB::transaction(function () use ($targets): void {
             $this->links()->delete();
@@ -266,6 +270,31 @@ class Decision extends Model
         });
 
         $this->unsetRelation('links');
+
+        $after = $this->linkTitles();
+
+        if ($before !== $after) {
+            AuditLog::record('decision.links_updated', $this, [
+                'decision' => $this->title,
+                'from' => $before,
+                'to' => $after,
+                'updated_by' => $actor?->name,
+            ]);
+        }
+    }
+
+    /**
+     * The linked records by name, ordered, so a change to the set can be
+     * compared and read back in the trail.
+     *
+     * @return list<string>
+     */
+    private function linkTitles(): array
+    {
+        return array_values($this->links
+            ->map(fn (DecisionLink $link): string => $link->describe()['title'])
+            ->sort()
+            ->all());
     }
 
     /**
@@ -360,6 +389,28 @@ class Decision extends Model
         if ($superseded->status === DecisionStatus::Draft) {
             throw ValidationException::withMessages([
                 'supersedes_id' => __('A draft is not on the ledger yet — there is nothing to supersede.'),
+            ]);
+        }
+
+        /*
+         * The chain forks otherwise: two records claiming one predecessor
+         * would collide on the unique reference, and the second confirmation
+         * would fail on a database error rather than a sentence anybody can
+         * act on.
+         */
+        $claimant = self::query()->where('supersedes_id', $superseded->id)->whereKeyNot($this->id)->first();
+
+        if ($claimant !== null) {
+            throw ValidationException::withMessages([
+                'supersedes_id' => __('That decision has already been superseded by :title.', [
+                    'title' => $claimant->title,
+                ]),
+            ]);
+        }
+
+        if ($superseded->status === DecisionStatus::Superseded) {
+            throw ValidationException::withMessages([
+                'supersedes_id' => __('That decision has already been superseded.'),
             ]);
         }
 
