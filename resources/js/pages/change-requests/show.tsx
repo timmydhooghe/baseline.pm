@@ -60,6 +60,7 @@ type Props = {
     position: EngagementPositionSummary;
     can: {
         update: boolean;
+        viewCommercials: boolean;
         startAssessment: boolean;
         moveToProposal: boolean;
         submit: boolean;
@@ -969,10 +970,9 @@ export default function ChangeRequestShow({
                                                             × {allocation.days}d
                                                         </span>
                                                         <span>
-                                                            {
-                                                                allocation.cost
-                                                                    .formatted
-                                                            }
+                                                            {allocation.cost
+                                                                ?.formatted ??
+                                                                ''}
                                                         </span>
                                                     </li>
                                                 ),
@@ -1057,7 +1057,7 @@ export default function ChangeRequestShow({
                     </div>
                 )}
 
-                {changeRequest.status !== 'draft' && (
+                {changeRequest.status !== 'draft' && can.viewCommercials && (
                     <div className={cardClasses} data-test="commercials-card">
                         <div className={cardHeaderClasses}>
                             <span className={sectionLabel}>
@@ -1324,6 +1324,16 @@ export default function ChangeRequestShow({
                                                     <InputError
                                                         message={
                                                             errors.customer_price
+                                                        }
+                                                    />
+                                                    <InputError
+                                                        message={
+                                                            errors.allocations
+                                                        }
+                                                    />
+                                                    <InputError
+                                                        message={
+                                                            errors.approvers
                                                         }
                                                     />
                                                 </div>

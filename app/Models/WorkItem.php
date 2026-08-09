@@ -258,6 +258,28 @@ class WorkItem extends Model
     }
 
     /**
+     * An approved change request settles its drift item's classification:
+     * the customer just bought the work, so the potential change resolves to
+     * existing scope on the deliverable the approval minted, and the mapping
+     * is audited as usual (FA-9 → FA-11). The reclassify-in-triage guard in
+     * linkTo() is satisfied, not bypassed — the customer's approval is the
+     * governance decision here, so no manual triage call is required.
+     */
+    public function absorbIntoApprovedScope(BaselineItem $deliverable): void
+    {
+        if ($this->link !== null) {
+            return;
+        }
+
+        if ($this->triage_status !== null && $this->triage_status !== WorkItemTriageStatus::ExistingScope) {
+            $this->triage_status = WorkItemTriageStatus::ExistingScope;
+            $this->save();
+        }
+
+        $this->linkTo($deliverable);
+    }
+
+    /**
      * The earliest evidence that execution began: the first worklog date,
      * or — when the state already moved past todo without any logged time —
      * the moment the item was first seen. Null means no work has demonstrably

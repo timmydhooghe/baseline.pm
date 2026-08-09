@@ -71,8 +71,8 @@ export type ChangeRequestAllocationView = {
     rateCardRoleId: string;
     roleName: string;
     days: string;
-    costPerDay: Money;
-    cost: Money;
+    costPerDay: Money | null;
+    cost: Money | null;
 };
 
 export type ChangeRequestAssessmentView = {

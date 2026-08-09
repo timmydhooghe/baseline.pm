@@ -54,6 +54,7 @@ class ChangeRequestSubmitted extends Notification implements ShouldQueue
             ->action(__('Review the proposal'), URL::signedRoute('portal.change-requests.show', [
                 'changeRequest' => $this->changeRequest->id,
                 'stakeholder' => $notifiable->id,
+                'snapshot' => $this->changeRequest->customer_snapshot_id,
             ]))
             ->line(__('Please respond by :date. Your decision is recorded immutably against the frozen proposal.', [
                 'date' => $this->changeRequest->respond_by?->toFormattedDateString() ?? '—',

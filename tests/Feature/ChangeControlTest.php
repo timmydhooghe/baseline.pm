@@ -440,8 +440,8 @@ test('approval records an immutable response and mints the next baseline version
         ->and($minted->allocations->where('baseline_item_id', $newDeliverable?->id))->toHaveCount(2)
         ->and($minted->costBudget()->amount)->toBe(810000 + 215000)
         ->and($baseline->refresh()->items)->toHaveCount(3)
-        ->and($engagement->positionSummary()['contracted']['amount'])->toBe(2400000)
-        ->and($engagement->positionSummary()['baselineVersion'])->toBe(2)
+        ->and($engagement->positionSummary(true)['contracted']['amount'])->toBe(2400000)
+        ->and($engagement->positionSummary(true)['baselineVersion'])->toBe(2)
         ->and(AuditLog::query()->where('action', 'baseline.version_minted')->where('subject_id', $minted->id)->exists())->toBeTrue()
         ->and(AuditLog::query()->where('action', 'change_request.approved')->where('subject_id', $changeRequest->id)->sole()->payload['baseline_version'])->toBe(2);
 
@@ -483,9 +483,12 @@ test('approving a drift-born change maps its work item to the minted deliverable
 
     $link = $workItem->refresh()->link;
 
+    // The customer bought the work: the potential-change classification
+    // settles to existing scope on the deliverable the approval minted.
     expect($link)->not->toBeNull()
         ->and($link->baselineItem->title)->toBe($changeRequest->title)
-        ->and($link->baselineItem->baseline_id)->toBe($changeRequest->refresh()->minted_baseline_id);
+        ->and($link->baselineItem->baseline_id)->toBe($changeRequest->refresh()->minted_baseline_id)
+        ->and($workItem->triage_status)->toBe(WorkItemTriageStatus::ExistingScope);
 });
 
 test('rejection is terminal and mints nothing', function () {
@@ -571,6 +574,7 @@ test('the portal shows the frozen customer proposal on a personally signed link'
     $signed = URL::signedRoute('portal.change-requests.show', [
         'changeRequest' => $changeRequest->id,
         'stakeholder' => $approver->id,
+        'snapshot' => $changeRequest->customer_snapshot_id,
     ]);
 
     $this->get($signed)
@@ -579,6 +583,7 @@ test('the portal shows the frozen customer proposal on a personally signed link'
             ->component('portal/change-request')
             ->where('proposal.price.amount', 400000)
             ->where('proposal.change_request.title', 'Supplier portal module')
+            ->where('superseded', false)
             ->where('canRespond', true)
             ->where('stakeholder.name', 'Anders Vik'));
 
@@ -586,6 +591,7 @@ test('the portal shows the frozen customer proposal on a personally signed link'
     $this->get(route('portal.change-requests.show', [
         'changeRequest' => $changeRequest->id,
         'stakeholder' => $approver->id,
+        'snapshot' => $changeRequest->customer_snapshot_id,
     ]))->assertForbidden();
 });
 
@@ -600,6 +606,7 @@ test('the portal records the decision immutably against the frozen snapshot', fu
     $respondUrl = URL::signedRoute('portal.change-requests.respond', [
         'changeRequest' => $changeRequest->id,
         'stakeholder' => $approver->id,
+        'snapshot' => $changeRequest->customer_snapshot_id,
     ]);
 
     $this->post($respondUrl, ['decision' => 'approved', 'comment' => 'Signed off in the portal.'])
@@ -610,6 +617,161 @@ test('the portal records the decision immutably against the frozen snapshot', fu
     expect($changeRequest->status)->toBe(ChangeRequestStatus::Approved)
         ->and($changeRequest->responses->sole()->comment)->toBe('Signed off in the portal.')
         ->and($changeRequest->responses->sole()->stakeholder_name)->toBe('Anders Vik');
+});
+
+test('members see the change request without cost, rates or margin', function () {
+    $setup = changeControlSetup();
+    $member = User::factory()->role(UserRole::Member)->for($setup['organization'])->create();
+    $changeRequest = priceProposal($setup);
+
+    $this->actingAs($member)
+        ->get(route('change-requests.show', $changeRequest))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('assessment.cost', null)
+            ->where('assessment.suggestedPrice', null)
+            ->where('assessment.margin', null)
+            ->where('assessment.allocations.0.costPerDay', null)
+            ->where('roles', [])
+            ->where('can.viewCommercials', false)
+            ->where('changeRequest.customerPrice.amount', 400000));
+});
+
+test('a stale portal link cannot decide on a revised proposal', function () {
+    Notification::fake();
+
+    $setup = changeControlSetup();
+    ['manager' => $manager, 'approver' => $approver] = $setup;
+    $changeRequest = priceProposal($setup);
+    $changeRequest->submitToCustomer(today()->addDays(14), $manager);
+
+    $staleSnapshotId = $changeRequest->refresh()->customer_snapshot_id;
+    $staleRespond = URL::signedRoute('portal.change-requests.respond', [
+        'changeRequest' => $changeRequest->id,
+        'stakeholder' => $approver->id,
+        'snapshot' => $staleSnapshotId,
+    ]);
+
+    // A clarification round revises the terms and freezes fresh snapshots.
+    $changeRequest->recordResponse($approver, ChangeRequestDecision::ClarificationRequested, 'Is hosting included?');
+    $changeRequest->refresh()->moveToProposal($manager);
+    $changeRequest->update(['customer_price' => Money::fromCents(480000)]);
+    $changeRequest->submitToCustomer(today()->addDays(14), $manager);
+
+    // The old tab still shows €4,000 — its link cannot approve €4,800 terms.
+    $this->post($staleRespond, ['decision' => 'approved'])->assertInvalid(['decision']);
+
+    expect($changeRequest->refresh()->status)->toBe(ChangeRequestStatus::AwaitingApproval)
+        ->and($changeRequest->responses)->toHaveCount(1);
+
+    // The superseded link keeps showing what it always showed, read-only.
+    $this->get(URL::signedRoute('portal.change-requests.show', [
+        'changeRequest' => $changeRequest->id,
+        'stakeholder' => $approver->id,
+        'snapshot' => $staleSnapshotId,
+    ]))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('proposal.price.amount', 400000)
+            ->where('superseded', true)
+            ->where('canRespond', false));
+
+    // The fresh link decides as usual, recorded against the fresh snapshot.
+    $this->post(URL::signedRoute('portal.change-requests.respond', [
+        'changeRequest' => $changeRequest->id,
+        'stakeholder' => $approver->id,
+        'snapshot' => $changeRequest->customer_snapshot_id,
+    ]), ['decision' => 'approved'])->assertRedirect();
+
+    $changeRequest->refresh();
+
+    expect($changeRequest->status)->toBe(ChangeRequestStatus::Approved)
+        ->and($changeRequest->responses->firstWhere('decision', ChangeRequestDecision::Approved)?->snapshot_id)
+        ->toBe($changeRequest->customer_snapshot_id);
+});
+
+test('approval rebases schedule impact when another change advanced the baseline first', function () {
+    Notification::fake();
+
+    $setup = changeControlSetup();
+    ['manager' => $manager, 'engagement' => $engagement, 'developer' => $developer, 'milestone' => $milestone, 'approver' => $approver] = $setup;
+
+    $first = priceProposal($setup);
+    $first->submitToCustomer(today()->addDays(14), $manager);
+
+    // A second change assessed against the same v1 go-live milestone.
+    $second = $engagement->draftChangeRequest([
+        'title' => 'Warehouse labelling',
+        'what' => 'Labelling for the second warehouse.',
+        'origin' => ChangeRequestOrigin::Meeting,
+    ], $manager);
+    $second->startAssessment($manager);
+    $second->allocations()->create([
+        'organization_id' => $second->organization_id,
+        'rate_card_role_id' => $developer->id,
+        'days' => '1',
+    ]);
+    $second->update(['impact_milestone_id' => $milestone->id, 'impact_days' => 7]);
+    $second->moveToProposal($manager);
+    $second->update(['customer_price' => Money::fromCents(100000)]);
+    $second->submitToCustomer(today()->addDays(14), $manager);
+
+    $first->refresh()->recordResponse($approver, ChangeRequestDecision::Approved);
+    $second->refresh()->recordResponse($approver, ChangeRequestDecision::Approved);
+
+    $v3 = $engagement->approvedBaseline();
+    $goLive = $v3?->items->firstWhere('title', 'Go-live');
+    $minted = AuditLog::query()->where('action', 'baseline.version_minted')->where('subject_id', $v3?->id)->sole();
+
+    // v2 moved go-live +10; v3 rebases the second reference through the item
+    // lineage and composes +7 on top — day counts, never absolute dates.
+    expect($v3?->version)->toBe(3)
+        ->and($goLive?->baseline_date?->toDateString())->toBe(today()->addDays(47)->toDateString())
+        ->and($v3?->contract_value->amount)->toBe(2500000)
+        ->and($minted->payload['schedule_impact']['applied'])->toBeTrue()
+        ->and($minted->payload['schedule_impact']['milestone'])->toBe('Go-live')
+        ->and($minted->payload['schedule_impact']['days'])->toBe(7);
+});
+
+test('a proposal whose role mix was cleared cannot be submitted', function () {
+    $setup = changeControlSetup();
+    ['manager' => $manager] = $setup;
+    $changeRequest = priceProposal($setup);
+
+    // The assessment stays editable on the proposal stage — clear the mix.
+    $this->actingAs($manager)
+        ->put(route('change-requests.assessment.update', $changeRequest), [
+            'allocations' => [],
+            'affected_items' => [],
+        ])
+        ->assertRedirect(route('change-requests.show', $changeRequest));
+
+    $this->actingAs($manager)
+        ->post(route('change-requests.submit', $changeRequest), ['respond_by' => today()->addDays(14)->toDateString()])
+        ->assertInvalid(['allocations']);
+
+    expect($changeRequest->refresh()->status)->toBe(ChangeRequestStatus::CustomerProposal)
+        ->and(Snapshot::query()->where('subject_id', $changeRequest->id)->count())->toBe(0);
+});
+
+test('submission requires a stakeholder with approval rights', function () {
+    Notification::fake();
+
+    $setup = changeControlSetup();
+    ['manager' => $manager, 'approver' => $approver] = $setup;
+    $changeRequest = priceProposal($setup);
+
+    $approver->delete();
+
+    $this->actingAs($manager)
+        ->post(route('change-requests.submit', $changeRequest), ['respond_by' => today()->addDays(14)->toDateString()])
+        ->assertInvalid(['approvers']);
+
+    expect($changeRequest->refresh()->status)->toBe(ChangeRequestStatus::CustomerProposal)
+        ->and($changeRequest->submitted_at)->toBeNull()
+        ->and(Snapshot::query()->where('subject_id', $changeRequest->id)->count())->toBe(0);
+
+    Notification::assertNothingSent();
 });
 
 test('reminders go to approvers near the deadline, at most once a day', function () {
