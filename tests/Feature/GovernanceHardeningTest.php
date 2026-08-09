@@ -692,3 +692,136 @@ test('an evidence trail entry carries the link that proves it', function () {
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('events.0.evidenceUrl', 'https://mail.example.test/thread/42'));
 });
+
+test('the backfill rescues history whose subject has since been deleted', function () {
+    ['manager' => $manager, 'engagement' => $engagement] = hardeningSetup();
+
+    $this->actingAs($manager);
+
+    $baseline = Baseline::factory()->for($engagement->organization)->for($engagement)->create();
+    $doomed = BaselineItem::factory()->for($engagement->organization)->for($baseline)->completeDeliverable()->create([
+        'title' => 'Item that was dropped from the draft',
+    ]);
+
+    $doomedId = $doomed->id;
+    $doomed->update(['title' => 'Renamed before being dropped']);
+    $doomed->delete();
+
+    expect(AuditLog::query()->where('subject_id', $doomedId)->count())->toBe(3);
+
+    // Exactly the state a pre-migration database is in.
+    DB::table('audit_logs')->update(['engagement_id' => null]);
+
+    $migration = require database_path('migrations/2026_08_09_160000_add_engagement_id_to_audit_logs_table.php');
+    $migration->backfill();
+
+    $entries = DB::table('audit_logs')->where('subject_id', $doomedId)->get();
+
+    // Create, update and delete alike — the update entry carries only the
+    // changed column, so it is rescued by its siblings.
+    expect($entries)->toHaveCount(3)
+        ->and($entries->pluck('engagement_id')->unique()->all())->toBe([$engagement->id]);
+
+    $this->get(route('engagements.audit.show', $engagement))
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('entries.data', fn ($data) => collect($data)
+                ->contains(fn (array $entry): bool => $entry['subjectId'] === $doomedId)));
+});
+
+test('the backfill leaves no dangling engagement reference for a deleted engagement', function () {
+    ['manager' => $manager, 'engagement' => $engagement, 'organization' => $organization] = hardeningSetup();
+
+    $this->actingAs($manager);
+
+    $doomed = Engagement::factory()
+        ->for($organization)
+        ->status(EngagementStatus::Draft)
+        ->create(['name' => 'Cancelled before it started']);
+
+    $doomedId = $doomed->id;
+    $doomed->delete();
+
+    DB::table('audit_logs')->update(['engagement_id' => null]);
+
+    $migration = require database_path('migrations/2026_08_09_160000_add_engagement_id_to_audit_logs_table.php');
+    $migration->backfill();
+
+    expect(DB::table('audit_logs')->where('subject_id', $doomedId)->value('engagement_id'))->toBeNull()
+        ->and(DB::table('audit_logs')->where('subject_id', $engagement->id)->value('engagement_id'))
+        ->toBe($engagement->id);
+});
+
+test('deleting an engagement still records it, belonging to no engagement', function () {
+    ['manager' => $manager, 'organization' => $organization] = hardeningSetup();
+
+    $this->actingAs($manager);
+
+    $doomed = Engagement::factory()
+        ->for($organization)
+        ->status(EngagementStatus::Draft)
+        ->create(['name' => 'Cancelled before it started']);
+
+    $doomedId = $doomed->id;
+    $doomed->delete();
+
+    $entry = AuditLog::query()
+        ->where('subject_id', $doomedId)
+        ->where('action', 'deleted')
+        ->sole();
+
+    expect($entry->engagement_id)->toBeNull()
+        ->and($entry->payload)->toHaveKey('name', 'Cancelled before it started');
+});
+
+test('a superseded record says acknowledgment is no longer asked for', function () {
+    ['manager' => $manager, 'engagement' => $engagement] = hardeningSetup();
+
+    $first = $engagement->recordDecision([
+        'title' => 'First',
+        'context' => 'Context.',
+        'decision' => 'Decided.',
+        'decided_on' => today()->subMonth(),
+        'visibility' => RecordVisibility::Shared,
+    ], $manager);
+    $first->confirm($manager);
+
+    $second = $engagement->recordDecision([
+        'title' => 'Second',
+        'context' => 'Context.',
+        'decision' => 'Decided again.',
+        'decided_on' => today(),
+        'supersedes_id' => $first->id,
+        'visibility' => RecordVisibility::Shared,
+    ], $manager);
+    $second->confirm($manager);
+
+    $this->actingAs($manager)
+        ->get(route('decisions.show', $first))
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('decision.status', 'superseded')
+            ->where('decision.acknowledgedAt', null)
+            ->where('decision.supersededByTitle', 'Second')
+            ->has('acknowledgementLinks', 0));
+});
+
+test('a transcript keeps its raw evidence even when the editable fields are cut', function () {
+    ['manager' => $manager, 'engagement' => $engagement] = hardeningSetup();
+
+    $line = 'Decision: '.str_repeat('we rebuild the importer and re-run the migration, ', 900);
+
+    $this->actingAs($manager)
+        ->post(route('engagements.decisions.transcript', $engagement), ['transcript' => $line])
+        ->assertRedirect();
+
+    $draft = Decision::query()->sole();
+
+    // Cut to the form's ceiling — trailing whitespace is trimmed before the
+    // ellipsis, so the result lands at or just under it.
+    expect(mb_strlen((string) $draft->decision))->toBeLessThanOrEqual(5000)
+        ->and(mb_strlen((string) $draft->decision))->toBeGreaterThan(4900)
+        ->and(mb_strlen($draft->context))->toBeLessThanOrEqual(5000)
+        // The evidence is kept whole — many times the editable ceiling — so a
+        // reader can still check the proposal against what was actually said.
+        ->and($draft->transcript_excerpt)->toBe(trim($line))
+        ->and(mb_strlen((string) $draft->transcript_excerpt))->toBeGreaterThan(40000);
+});

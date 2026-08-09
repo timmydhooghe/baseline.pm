@@ -30,12 +30,18 @@ class ProposeDecisionsFromTranscript
     private const int CONTEXT_LINES = 3;
 
     /**
-     * The ceiling the decision form itself enforces on context and outcome.
-     * A transcript is allowed to be far longer than one record, so a single
-     * enormous line has to be cut here — a draft nobody can save because its
-     * own extraction overflowed validation is worse than a shortened one.
+     * The ceiling the decision form itself enforces on the two fields a
+     * human edits. A transcript is allowed to be far longer than one record,
+     * so a single enormous line has to be cut — a draft nobody can save
+     * because its own extraction overflowed validation is worse than a
+     * shortened one.
+     *
+     * The excerpt is deliberately exempt: it is the evidence, it is never
+     * re-submitted through a form, and its size is already bounded by the
+     * limit on the transcript it came from. Trimming it would quietly
+     * destroy the very thing a reader checks the proposal against.
      */
-    private const int MAX_TEXT = 5000;
+    private const int MAX_EDITABLE_TEXT = 5000;
 
     /**
      * Lines that announce a decision outright, whatever follows the marker.
@@ -89,7 +95,7 @@ class ProposeDecisionsFromTranscript
                 'context' => $this->capped($excerpt),
                 'decision' => $this->capped($sentence),
                 'participants' => $participants,
-                'transcript_excerpt' => $this->capped($excerpt),
+                'transcript_excerpt' => $excerpt,
             ];
 
             if (count($proposals) === self::MAX_PROPOSALS) {
@@ -103,11 +109,12 @@ class ProposeDecisionsFromTranscript
     /**
      * Text cut to the ceiling the decision form enforces, ellipsis included
      * in the count — an extraction that overflows its own validation leaves
-     * a draft nobody can save.
+     * a draft nobody can save. The untrimmed original survives on the
+     * record's excerpt.
      */
     private function capped(string $text): string
     {
-        return Str::limit($text, self::MAX_TEXT - 1, '…');
+        return Str::limit($text, self::MAX_EDITABLE_TEXT - 1, '…');
     }
 
     /**

@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -62,9 +63,25 @@ return new class extends Migration
      */
     public function backfill(): void
     {
+        $this->backfillFromLiveSubjects();
+        $this->backfillFromPayloads();
+    }
+
+    /**
+     * Resolve every entry whose subject — or the parent it hangs off — is
+     * still in the database.
+     */
+    private function backfillFromLiveSubjects(): void
+    {
         DB::table('audit_logs')
             ->where('subject_type', 'App\Models\Engagement')
             ->whereNull('engagement_id')
+            /*
+             * An engagement that was hard-deleted leaves its entries behind;
+             * writing its id back would violate the foreign key this
+             * migration just added.
+             */
+            ->whereIn('subject_id', fn (Builder $engagements) => $engagements->select('id')->from('engagements'))
             ->update(['engagement_id' => DB::raw('subject_id')]);
 
         foreach (self::SUBJECT_SOURCES as $subjectType => $source) {
@@ -90,6 +107,89 @@ return new class extends Migration
                 ->whereNull('engagement_id')
                 ->update(['engagement_id' => DB::raw("({$lookup})")]);
         }
+    }
+
+    /**
+     * Deleted subjects have no row left to join to — a baseline item removed
+     * from a draft, a document replaced, a role-mix line rewritten. Their
+     * history is exactly the history the trail exists to keep, so the
+     * engagement is read from the payload instead: the create and delete
+     * entries carry the record's own attributes, parent reference included.
+     *
+     * One resolved entry answers for every entry about that subject, which
+     * is what rescues the update entries in between — those carry only the
+     * changed columns.
+     */
+    private function backfillFromPayloads(): void
+    {
+        $engagementBySubject = [];
+
+        DB::table('audit_logs')
+            ->whereNull('engagement_id')
+            ->whereIn('subject_type', array_keys(self::SUBJECT_SOURCES))
+            ->orderBy('id')
+            ->each(function (object $entry) use (&$engagementBySubject): void {
+                $subjectId = (string) $entry->subject_id;
+
+                if (array_key_exists($subjectId, $engagementBySubject)) {
+                    return;
+                }
+
+                $payload = json_decode((string) $entry->payload, true);
+
+                if (! is_array($payload)) {
+                    return;
+                }
+
+                $engagementId = $this->engagementFromPayload(
+                    $payload,
+                    self::SUBJECT_SOURCES[(string) $entry->subject_type],
+                );
+
+                if ($engagementId !== null) {
+                    $engagementBySubject[$subjectId] = $engagementId;
+                }
+            });
+
+        foreach ($engagementBySubject as $subjectId => $engagementId) {
+            DB::table('audit_logs')
+                ->where('subject_id', $subjectId)
+                ->whereNull('engagement_id')
+                ->update(['engagement_id' => $engagementId]);
+        }
+    }
+
+    /**
+     * The engagement a recorded payload points at: directly for records that
+     * carry it, otherwise through the parent they name. A subject whose
+     * parent is gone too stays unresolved — an invented reference would be
+     * worse than an absent one.
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  array{table: string, via?: array{table: string, key: string}}  $source
+     */
+    private function engagementFromPayload(array $payload, array $source): ?string
+    {
+        $via = $source['via'] ?? null;
+
+        if ($via === null) {
+            $engagementId = $payload['engagement_id'] ?? null;
+
+            return is_string($engagementId)
+                && DB::table('engagements')->where('id', $engagementId)->exists()
+                    ? $engagementId
+                    : null;
+        }
+
+        $parentId = $payload[$via['key']] ?? null;
+
+        if (! is_string($parentId)) {
+            return null;
+        }
+
+        $engagementId = DB::table($source['table'])->where('id', $parentId)->value('engagement_id');
+
+        return is_string($engagementId) ? $engagementId : null;
     }
 
     public function down(): void

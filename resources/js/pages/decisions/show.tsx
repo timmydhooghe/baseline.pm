@@ -629,6 +629,17 @@ export default function DecisionsShow({
                                     </span>
                                 )}
                             </p>
+                        ) : decision.status === 'superseded' ? (
+                            <p
+                                className="text-[13px] text-stone dark:text-fog"
+                                data-test="acknowledgment-not-requested"
+                            >
+                                Never acknowledged, and no longer asked for —
+                                {decision.supersededByTitle !== null
+                                    ? ` ${decision.supersededByTitle} replaced this record`
+                                    : ' a later record replaced this one'}
+                                . The customer acknowledges that one instead.
+                            </p>
                         ) : (
                             <div className="flex flex-col gap-2">
                                 <p className="text-[13px] text-stone dark:text-fog">

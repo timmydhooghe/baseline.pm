@@ -105,7 +105,13 @@ class AuditLog extends Model
     public static function resolveEngagementId(Model $subject): ?string
     {
         if ($subject instanceof Engagement) {
-            return $subject->getKey();
+            /*
+             * The entry recording an engagement's own deletion cannot point
+             * at it: the row is already gone and the reference would be
+             * rejected. It belongs to no engagement, which is exactly what
+             * a null says.
+             */
+            return $subject->exists ? $subject->getKey() : null;
         }
 
         $engagementId = $subject->getAttribute('engagement_id');
