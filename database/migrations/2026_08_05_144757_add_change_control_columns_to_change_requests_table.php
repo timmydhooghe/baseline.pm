@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * The change-control lifecycle on top of drift-born drafts (FA-11..13):
+ * The change-control lifecycle on top of scope-creep-born drafts (FA-11..13):
  * the rate card version the assessment is priced with (pinned when the
  * assessment starts, so cost stays derived), the numeric customer price,
  * structured schedule impact (a milestone reference plus a day count — no

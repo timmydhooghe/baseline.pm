@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Change requests (FA-11..13). Introduced here for drift-born drafts:
+ * Change requests (FA-11..13). Introduced here for scope-creep-born drafts:
  * triaging an unmapped work item as a potential change pre-fills a draft CR
  * from the item (FA-9) — effort seeded from the provider estimate and logged
  * time, and work_started_at snapshotting the earliest evidence of execution

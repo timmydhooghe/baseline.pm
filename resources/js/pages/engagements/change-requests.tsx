@@ -166,7 +166,7 @@ export default function EngagementChangeRequests({
                                         Raise a change request
                                     </DialogTitle>
                                     <DialogDescription>
-                                        Drift items draft their own change
+                                        Scope creep items draft their own change
                                         requests from triage — this is for
                                         changes surfacing through other
                                         channels.
@@ -315,8 +315,9 @@ export default function EngagementChangeRequests({
                     </div>
                     {changeRequests.length === 0 ? (
                         <p className="px-4 py-6 text-[13px] text-stone dark:text-fog">
-                            No change requests yet. Drift triage drafts them
-                            from unmapped work; anything else is raised here.
+                            No change requests yet. Scope creep triage drafts
+                            them from unmapped work; anything else is raised
+                            here.
                         </p>
                     ) : (
                         <div className="overflow-x-auto">

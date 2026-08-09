@@ -78,7 +78,7 @@ class ChangeRequestController extends Controller
 
     /**
      * Raise a change request by hand (FA-11) — steering calls and emails
-     * surface changes too, not just drift.
+     * surface changes too, not just scope creep.
      */
     public function store(StoreChangeRequestRequest $request, Engagement $engagement): RedirectResponse
     {
@@ -97,7 +97,7 @@ class ChangeRequestController extends Controller
 
     /**
      * One change request with everything a decision needs (FA-12): the
-     * narrative, the drift evidence, the structured assessment priced at the
+     * narrative, the scope creep evidence, the structured assessment priced at the
      * pinned rate card version, derived commercials, and the decision trail.
      */
     public function show(Request $request, ChangeRequest $changeRequest): Response

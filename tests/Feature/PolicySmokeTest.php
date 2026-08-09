@@ -131,7 +131,7 @@ test('a decided change request cannot be updated even by managers', function () 
     expect(Gate::forUser($manager)->allows('update', $changeRequest))->toBeFalse();
 });
 
-test('drift triage is a governance call for managing roles only', function (UserRole $role, bool $allowed) {
+test('scope creep triage is a governance call for managing roles only', function (UserRole $role, bool $allowed) {
     $user = User::factory()->role($role)->create();
     $engagement = Engagement::factory()->for($user->organization)->create();
     $workItem = WorkItem::factory()->for($user->organization)->for($engagement)->create();

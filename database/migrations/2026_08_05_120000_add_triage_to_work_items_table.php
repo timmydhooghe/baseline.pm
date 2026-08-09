@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Triage of unmapped work (FA-9): each drift item is classified — existing
+ * Triage of unmapped work (FA-9): each scope creep item is classified — existing
  * scope, potential change, operational or dismissed — recorded with who
  * classified it and when. A null triage_status on an unmapped item means it
  * is still in the triage inbox and its potential price counts toward the

@@ -449,7 +449,7 @@ test('approval records an immutable response and mints the next baseline version
         ->toThrow(LogicException::class, 'A decided change request is immutable — the decision is on record.');
 });
 
-test('approving a drift-born change maps its work item to the minted deliverable', function () {
+test('approving a scope-creep-born change maps its work item to the minted deliverable', function () {
     Notification::fake();
 
     $setup = changeControlSetup();
@@ -466,7 +466,7 @@ test('approving a drift-born change maps its work item to the minted deliverable
     $changeRequest = $workItem->changeRequest;
 
     expect($changeRequest->flagsContractualBreach())->toBeTrue()
-        ->and($changeRequest->origin)->toBe(ChangeRequestOrigin::Drift)
+        ->and($changeRequest->origin)->toBe(ChangeRequestOrigin::ScopeCreep)
         ->and($changeRequest->estimated_days)->toBe(2.0);
 
     $changeRequest->startAssessment($manager);

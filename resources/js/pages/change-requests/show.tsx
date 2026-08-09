@@ -125,7 +125,7 @@ export default function ChangeRequestShow({
         assessment.allocations.length === 0 &&
         changeRequest.estimatedDays !== null
             ? [
-                  // Prefill from the drift evidence: the greater of the
+                  // Prefill from the scope creep evidence: the greater of the
                   // provider estimate and logged time, waiting for a role.
                   {
                       key: 0,
@@ -403,11 +403,11 @@ export default function ChangeRequestShow({
                                                     />
                                                 </div>
                                                 {changeRequest.origin ===
-                                                'drift' ? (
+                                                'scope_creep' ? (
                                                     <input
                                                         type="hidden"
                                                         name="origin"
-                                                        value="drift"
+                                                        value="scope_creep"
                                                     />
                                                 ) : (
                                                     <div className="grid gap-2">

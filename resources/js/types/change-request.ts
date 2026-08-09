@@ -9,7 +9,7 @@ export type ChangeRequestStatus =
     | 'rejected';
 
 export type ChangeRequestOrigin =
-    'drift' | 'steering_call' | 'email' | 'meeting' | 'other';
+    'scope_creep' | 'steering_call' | 'email' | 'meeting' | 'other';
 
 export type ChangeRequestDecision =
     'approved' | 'rejected' | 'clarification_requested';

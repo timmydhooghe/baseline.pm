@@ -31,7 +31,7 @@ use LogicException;
 
 /**
  * A request to change the committed baseline (FA-11..13). Born as a draft —
- * from drift triage (FA-9) or raised by hand — it moves through structured
+ * from scope creep triage (FA-9) or raised by hand — it moves through structured
  * assessment (effort as a role mix priced at the pinned rate card version),
  * a customer proposal (numeric price, structured schedule impact) and a
  * frozen portal review to a decision. Approval mints the next baseline
@@ -649,8 +649,8 @@ class ChangeRequest extends Model
         ]);
 
         /*
-         * A drift-born change that is approved is scope now: map its origin
-         * work item to the deliverable the approval created, so the drift
+         * A scope-creep-born change that is approved is scope now: map its origin
+         * work item to the deliverable the approval created, so the scope creep
          * loop closes on the ledger too.
          */
         $this->workItem?->absorbIntoApprovedScope($deliverable);

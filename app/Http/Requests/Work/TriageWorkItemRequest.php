@@ -23,7 +23,7 @@ class TriageWorkItemRequest extends FormRequest
 
     /**
      * Get the validation rules that apply to the request. That the item is
-     * actually drift and the deliverable belongs to this engagement is
+     * actually scope creep and the deliverable belongs to this engagement is
      * enforced by WorkItem::triage().
      *
      * @return array<string, ValidationRule|array<mixed>|string>

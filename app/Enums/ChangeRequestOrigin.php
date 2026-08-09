@@ -3,13 +3,13 @@
 namespace App\Enums;
 
 /**
- * Where a change request came from (FA-12): a drift item promoted out of the
- * triage inbox, or a request raised by hand from a steering call, an email
- * or another channel.
+ * Where a change request came from (FA-12): a scope creep item promoted out
+ * of the triage inbox, or a request raised by hand from a steering call, an
+ * email or another channel.
  */
 enum ChangeRequestOrigin: string
 {
-    case Drift = 'drift';
+    case ScopeCreep = 'scope_creep';
     case SteeringCall = 'steering_call';
     case Email = 'email';
     case Meeting = 'meeting';
@@ -18,7 +18,7 @@ enum ChangeRequestOrigin: string
     public function label(): string
     {
         return match ($this) {
-            self::Drift => 'Drift item',
+            self::ScopeCreep => 'Scope creep item',
             self::SteeringCall => 'Steering call',
             self::Email => 'Email',
             self::Meeting => 'Meeting',

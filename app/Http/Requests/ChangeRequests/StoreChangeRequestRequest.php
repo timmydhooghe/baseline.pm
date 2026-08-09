@@ -25,7 +25,7 @@ class StoreChangeRequestRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * Drift-born drafts come from triage (FA-9); requests raised by hand
+     * Scope-creep-born drafts come from triage (FA-9); requests raised by hand
      * carry any other origin.
      *
      * @return array<string, ValidationRule|array<mixed>|string>
@@ -36,7 +36,7 @@ class StoreChangeRequestRequest extends FormRequest
             'title' => ['required', 'string', 'max:255'],
             'what' => ['required', 'string', 'max:5000'],
             'why' => ['nullable', 'string', 'max:5000'],
-            'origin' => ['required', Rule::enum(ChangeRequestOrigin::class)->except(ChangeRequestOrigin::Drift)],
+            'origin' => ['required', Rule::enum(ChangeRequestOrigin::class)->except(ChangeRequestOrigin::ScopeCreep)],
             'estimated_days' => ['nullable', 'numeric', 'decimal:0,2', 'min:0.01', 'max:10000'],
         ];
     }

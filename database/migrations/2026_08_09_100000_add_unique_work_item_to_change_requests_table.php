@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * One drift-born change request per work item, enforced at the database:
+ * One scope-creep-born change request per work item, enforced at the database:
  * the row lock in WorkItem::triage() serializes concurrent classifications,
  * and this index is the backstop should any future write path skip it.
  * Nullable, so change requests without an origin item are unaffected. If

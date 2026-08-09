@@ -843,7 +843,7 @@ test('history survives a draft change request discarded during re-triage', funct
         ->for($engagement)
         ->create(['title' => 'Unmapped export job']);
 
-    // Drift triaged as a potential change drafts a change request…
+    // Scope creep triaged as a potential change drafts a change request…
     $workItem->triage(WorkItemTriageStatus::PotentialChange, $manager);
     $changeRequestId = $workItem->refresh()->changeRequest?->id;
 

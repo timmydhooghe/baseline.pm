@@ -31,7 +31,7 @@ use Illuminate\Validation\ValidationException;
  * A unit of execution work on an engagement (FA-7, FA-8): an issue imported
  * from Jira or Linear, or a manual item recorded in standalone mode. Synced
  * items mirror the provider and are refreshed by sync runs; manual items are
- * edited by hand. Whether the item is mapped to a deliverable is the drift
+ * edited by hand. Whether the item is mapped to a deliverable is the scope creep
  * signal (FA-9): unmapped work is potential scope creep, surfaced in the
  * triage inbox until it is classified — existing scope, potential change,
  * operational or dismissed — with classifier and timestamp. Sync mirroring
@@ -183,7 +183,7 @@ class WorkItem extends Model
     }
 
     /**
-     * Classify this drift item out of the triage inbox (FA-9). Every
+     * Classify this scope creep item out of the triage inbox (FA-9). Every
      * decision is recorded with classifier and timestamp and lands in the
      * audit log — dismissals included, so the call stays on record. Existing
      * scope must name the deliverable that absorbs the work; excluding work
@@ -217,7 +217,7 @@ class WorkItem extends Model
 
             if ($this->link !== null) {
                 throw ValidationException::withMessages([
-                    'classification' => __('This item is already mapped to a deliverable — it is not drift.'),
+                    'classification' => __('This item is already mapped to a deliverable — it is not scope creep.'),
                 ]);
             }
 
@@ -258,7 +258,7 @@ class WorkItem extends Model
     }
 
     /**
-     * An approved change request settles its drift item's classification:
+     * An approved change request settles its scope creep item's classification:
      * the customer just bought the work, so the potential change resolves to
      * existing scope on the deliverable the approval minted, and the mapping
      * is audited as usual (FA-9 → FA-11). The reclassify-in-triage guard in
@@ -302,7 +302,7 @@ class WorkItem extends Model
     }
 
     /**
-     * The effort basis for pricing drift (FA-9): the greater of the estimate
+     * The effort basis for pricing scope creep (FA-9): the greater of the estimate
      * converted to working days and the time actually logged — logged time
      * can outgrow the estimate, and unbilled risk should not shrink because
      * it did. Null when neither yields days (e.g. a points estimate with no
@@ -348,7 +348,7 @@ class WorkItem extends Model
     }
 
     /**
-     * A reclassification away from potential change makes the drift-born
+     * A reclassification away from potential change makes the scope-creep-born
      * draft moot: discard it, audited, so no stale change request lingers
      * next to a dismissed or operational item. Once change control has
      * moved the request beyond draft it is a governance record in flight —
@@ -379,7 +379,7 @@ class WorkItem extends Model
     }
 
     /**
-     * Pre-fill a draft change request from this drift item (FA-9 → FA-12):
+     * Pre-fill a draft change request from this scope creep item (FA-9 → FA-12):
      * effort seeded from the greater of the provider estimate and logged
      * time, and the earliest evidence of started work snapshotted so the
      * contractual breach risk survives later syncs. One draft per item —
@@ -394,12 +394,12 @@ class WorkItem extends Model
         ]));
 
         $changeRequest = new ChangeRequest([
-            'title' => __('Drift: :title', ['title' => $this->title]),
-            'what' => __(':title (:origin) surfaced as unmapped drift work. Assess scope, affected deliverables and commercial terms.', [
+            'title' => __('Scope creep: :title', ['title' => $this->title]),
+            'what' => __(':title (:origin) surfaced as unmapped scope creep. Assess scope, affected deliverables and commercial terms.', [
                 'title' => $this->title,
                 'origin' => $origin,
             ]),
-            'origin' => ChangeRequestOrigin::Drift,
+            'origin' => ChangeRequestOrigin::ScopeCreep,
             'estimated_days' => $this->effortDays(),
             'logged_seconds' => $this->loggedSeconds(),
             'work_started_at' => $this->workStartedAt(),

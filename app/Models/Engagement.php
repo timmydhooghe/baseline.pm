@@ -374,7 +374,7 @@ class Engagement extends Model
     /**
      * Raise a change request by hand (FA-11): a steering call, an email or
      * another channel surfaced a change that never touched the triage inbox.
-     * Drift-born drafts come from WorkItem::triage() instead.
+     * Scope-creep-born drafts come from WorkItem::triage() instead.
      *
      * @param  array<string, mixed>  $attributes
      */
@@ -622,7 +622,7 @@ class Engagement extends Model
      *
      * @return HasMany<WorkItem, $this>
      */
-    public function driftWorkItems(): HasMany
+    public function scopeCreepWorkItems(): HasMany
     {
         return $this->workItems()
             ->whereDoesntHave('link')
@@ -630,7 +630,7 @@ class Engagement extends Model
     }
 
     /**
-     * The aggregate commercial exposure of unresolved drift (FA-10): every
+     * The aggregate commercial exposure of unresolved scope creep (FA-10): every
      * untriaged unmapped item priced at the current baseline's blended day
      * rates. Items without priceable effort are counted as unpriced —
      * visible risk that carries no number yet, never a made-up one.
@@ -640,7 +640,7 @@ class Engagement extends Model
     public function unbilledRisk(): array
     {
         $rates = $this->currentBaseline()?->blendedDayRates();
-        $items = $this->driftWorkItems()->with('worklogs')->get();
+        $items = $this->scopeCreepWorkItems()->with('worklogs')->get();
 
         $cost = Money::zero();
         $price = Money::zero();
@@ -676,7 +676,7 @@ class Engagement extends Model
 
     /**
      * The position rail summary (FA-10, FA-23): what is contracted, what the
-     * customer has signed off, and what the unresolved drift would be worth,
+     * customer has signed off, and what the unresolved scope creep would be worth,
      * always visible beside the engagement's pages. The waterfall's remaining
      * lines — burned, pending CRs — arrive with their own features (FA-14,
      * FA-16).

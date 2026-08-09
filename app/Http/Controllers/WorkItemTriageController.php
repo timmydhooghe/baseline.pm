@@ -14,7 +14,7 @@ use Inertia\Inertia;
 class WorkItemTriageController extends Controller
 {
     /**
-     * Record a triage decision on a drift item (FA-9): existing scope maps
+     * Record a triage decision on a scope creep item (FA-9): existing scope maps
      * it to the deliverable that absorbs the cost, potential change drafts a
      * pre-filled change request, operational excludes it with the logged
      * explanation, dismiss takes it off the queue — every decision recorded

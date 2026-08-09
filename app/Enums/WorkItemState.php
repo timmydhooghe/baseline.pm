@@ -4,8 +4,8 @@ namespace App\Enums;
 
 /**
  * The provider-independent workflow state of a work item. Jira status
- * categories and Linear state types normalize onto these four so drift and
- * burn analysis never depend on provider-specific workflow names.
+ * categories and Linear state types normalize onto these four so scope creep
+ * and burn analysis never depend on provider-specific workflow names.
  */
 enum WorkItemState: string
 {

@@ -24,7 +24,7 @@ class UpdateChangeRequestRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * The narrative fields of a change request (FA-12). A drift origin is
+     * The narrative fields of a change request (FA-12). A scope creep origin is
      * evidence from triage and cannot be claimed or changed by hand.
      *
      * @return array<string, ValidationRule|array<mixed>|string>
@@ -34,9 +34,9 @@ class UpdateChangeRequestRequest extends FormRequest
         $changeRequest = $this->route('changeRequest');
         $changeRequest = $changeRequest instanceof ChangeRequest ? $changeRequest : null;
 
-        $originRule = $changeRequest?->origin === ChangeRequestOrigin::Drift
-            ? Rule::enum(ChangeRequestOrigin::class)->only(ChangeRequestOrigin::Drift)
-            : Rule::enum(ChangeRequestOrigin::class)->except(ChangeRequestOrigin::Drift);
+        $originRule = $changeRequest?->origin === ChangeRequestOrigin::ScopeCreep
+            ? Rule::enum(ChangeRequestOrigin::class)->only(ChangeRequestOrigin::ScopeCreep)
+            : Rule::enum(ChangeRequestOrigin::class)->except(ChangeRequestOrigin::ScopeCreep);
 
         return [
             'title' => ['required', 'string', 'max:255'],

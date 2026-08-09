@@ -56,7 +56,7 @@ class TriageController extends Controller
             ->sortBy('baseline_date')
             ->first();
 
-        $inbox = $engagement->driftWorkItems()
+        $inbox = $engagement->scopeCreepWorkItems()
             ->with('worklogs')
             ->orderBy('created_at')
             ->get();

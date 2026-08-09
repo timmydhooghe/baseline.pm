@@ -235,7 +235,7 @@ test('the register orders worst first and surfaces escalated entries', function 
     ['manager' => $manager, 'engagement' => $engagement] = riskSetup();
 
     $engagement->registerRisk(riskPayload([
-        'title' => 'Minor styling drift',
+        'title' => 'Minor styling inconsistency',
         'probability' => RiskRating::Low,
         'impact' => RiskRating::Low,
     ]), $manager);

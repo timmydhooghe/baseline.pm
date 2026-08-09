@@ -3,8 +3,8 @@
 namespace App\Enums;
 
 /**
- * The classification a drift item received in the triage inbox (FA-9).
- * Untriaged drift carries no status at all — a null column — and keeps
+ * The classification a scope creep item received in the triage inbox (FA-9).
+ * Untriaged scope creep carries no status at all — a null column — and keeps
  * counting toward unbilled risk (FA-10). Every classification is recorded
  * with classifier and timestamp, and even dismissals stay on record.
  */

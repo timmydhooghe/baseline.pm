@@ -463,7 +463,7 @@ class Baseline extends Model
     }
 
     /**
-     * The blended cost and sell day rates that drift pricing derives from
+     * The blended cost and sell day rates that scope creep pricing derives from
      * (FA-9): the baseline's role mix weighted by allocated days — the
      * planned team's actual composition — falling back to a straight average
      * over the pinned rate card version while no role mix exists. Null when

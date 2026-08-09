@@ -91,15 +91,15 @@ test('the triage inbox surfaces unmapped untriaged work with age, logged time, d
 
     ['user' => $user, 'organization' => $organization, 'engagement' => $engagement, 'deliverable' => $deliverable, 'connection' => $connection] = triageSetup();
 
-    $drift = WorkItem::factory()->jira()
+    $creep = WorkItem::factory()->jira()
         ->for($organization)
         ->for($engagement)
         ->for($connection, 'integration')
         ->create(['estimate_value' => 2 * 8 * 3600, 'state' => WorkItemState::Todo]);
-    $drift->forceFill(['created_at' => now()->subDays(10)])->save();
+    $creep->forceFill(['created_at' => now()->subDays(10)])->save();
 
     WorkItemWorklog::factory()->for($organization)->create([
-        'work_item_id' => $drift->id,
+        'work_item_id' => $creep->id,
         'seconds' => 4 * 3600,
         'logged_on' => now()->subDays(3),
     ]);
@@ -116,7 +116,7 @@ test('the triage inbox surfaces unmapped untriaged work with age, logged time, d
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('engagements/triage')
             ->has('inbox', 1)
-            ->where('inbox.0.id', $drift->id)
+            ->where('inbox.0.id', $creep->id)
             ->where('inbox.0.ageDays', 10)
             ->where('inbox.0.logged', '4h')
             ->where('inbox.0.effortDays', 2)
@@ -131,7 +131,7 @@ test('the triage inbox surfaces unmapped untriaged work with age, logged time, d
             ->etc());
 });
 
-test('drift pricing blends the baseline role mix weighted by allocated days', function () {
+test('scope creep pricing blends the baseline role mix weighted by allocated days', function () {
     ['user' => $user, 'organization' => $organization, 'engagement' => $engagement, 'baseline' => $baseline, 'rateCardVersion' => $rateCardVersion, 'deliverable' => $deliverable] = triageSetup(approveBaseline: false);
 
     $senior = RateCardRole::factory()->for($organization)->create([
@@ -244,7 +244,7 @@ test('classifying as a potential change drafts a change request pre-filled from 
     expect($changeRequest->status)->toBe(ChangeRequestStatus::Draft)
         ->and($changeRequest->work_item_id)->toBe($item->id)
         ->and($changeRequest->engagement_id)->toBe($engagement->id)
-        ->and($changeRequest->origin)->toBe(ChangeRequestOrigin::Drift)
+        ->and($changeRequest->origin)->toBe(ChangeRequestOrigin::ScopeCreep)
         ->and($changeRequest->title)->toContain($item->title)
         ->and($changeRequest->estimated_days)->toBe(2.0)
         ->and($changeRequest->logged_seconds)->toBe(4 * 3600)
@@ -282,7 +282,7 @@ test('excluding work as operational demands an explanation that stays on record'
     expect($item->triage_status)->toBe(WorkItemTriageStatus::Operational)
         ->and($item->triage_note)->toBe('Internal CI maintenance, not client scope.')
         ->and($item->link)->toBeNull()
-        ->and($engagement->driftWorkItems()->count())->toBe(0);
+        ->and($engagement->scopeCreepWorkItems()->count())->toBe(0);
 });
 
 test('a dismissed item leaves the queue but its classification stays on record', function () {
@@ -334,7 +334,7 @@ test('work already in motion without an approved change request is flagged as co
             ->etc());
 });
 
-test('unbilled risk aggregates the potential price of unresolved drift and shrinks as it is triaged', function () {
+test('unbilled risk aggregates the potential price of unresolved scope creep and shrinks as it is triaged', function () {
     ['user' => $user, 'organization' => $organization, 'engagement' => $engagement, 'baseline' => $baseline] = triageSetup();
 
     [$first, $second] = WorkItem::factory()
@@ -369,16 +369,16 @@ test('unlinking an item classified as existing scope sends it back to the triage
     $item = WorkItem::factory()->for($organization)->for($engagement)->create();
     $item->triage(WorkItemTriageStatus::ExistingScope, $user, $deliverable);
 
-    expect($engagement->driftWorkItems()->count())->toBe(0);
+    expect($engagement->scopeCreepWorkItems()->count())->toBe(0);
 
     $item->refresh()->unlink($user);
 
     expect($item->refresh()->triage_status)->toBeNull()
         ->and($item->triaged_by)->toBeNull()
-        ->and($engagement->driftWorkItems()->count())->toBe(1);
+        ->and($engagement->scopeCreepWorkItems()->count())->toBe(1);
 });
 
-test('an item that is already mapped cannot be triaged as drift', function () {
+test('an item that is already mapped cannot be triaged as scope creep', function () {
     Queue::fake();
 
     ['user' => $user, 'organization' => $organization, 'engagement' => $engagement, 'deliverable' => $deliverable] = triageSetup();
@@ -393,7 +393,7 @@ test('an item that is already mapped cannot be triaged as drift', function () {
     expect($item->refresh()->triage_status)->toBeNull();
 });
 
-test('classifying drift is a governance call reserved for managers', function () {
+test('classifying scope creep is a governance call reserved for managers', function () {
     ['user' => $member, 'organization' => $organization, 'engagement' => $engagement] = triageSetup(UserRole::Member);
 
     $item = WorkItem::factory()->for($organization)->for($engagement)->create();
@@ -410,7 +410,7 @@ test('classifying drift is a governance call reserved for managers', function ()
             ->etc());
 });
 
-test('members see the drift queue but never rates, cost or price', function () {
+test('members see the scope creep queue but never rates, cost or price', function () {
     ['user' => $member, 'organization' => $organization, 'engagement' => $engagement] = triageSetup(UserRole::Member);
 
     WorkItem::factory()->for($organization)->for($engagement)->create([
@@ -470,7 +470,7 @@ test('a classified item cannot be mapped until it is reclassified as existing sc
         ->and($item->link?->baseline_item_id)->toBe($deliverable->id);
 });
 
-test('deleting a draft deliverable unlinks its work and returns it to drift', function () {
+test('deleting a draft deliverable unlinks its work and returns it to the scope creep queue', function () {
     Queue::fake();
 
     ['user' => $user, 'organization' => $organization, 'engagement' => $engagement, 'baseline' => $baseline, 'deliverable' => $deliverable] = triageSetup(approveBaseline: false);
@@ -478,7 +478,7 @@ test('deleting a draft deliverable unlinks its work and returns it to drift', fu
     $item = WorkItem::factory()->for($organization)->for($engagement)->create();
     $item->triage(WorkItemTriageStatus::ExistingScope, $user, $deliverable);
 
-    expect($engagement->driftWorkItems()->count())->toBe(0);
+    expect($engagement->scopeCreepWorkItems()->count())->toBe(0);
 
     $this->actingAs($user)
         ->delete(route('baselines.items.destroy', [$baseline, $deliverable]))
@@ -488,7 +488,7 @@ test('deleting a draft deliverable unlinks its work and returns it to drift', fu
 
     expect($item->link)->toBeNull()
         ->and($item->triage_status)->toBeNull()
-        ->and($engagement->driftWorkItems()->count())->toBe(1)
+        ->and($engagement->scopeCreepWorkItems()->count())->toBe(1)
         ->and(AuditLog::query()->where('action', 'work_item.unlinked')->count())->toBe(1);
 });
 

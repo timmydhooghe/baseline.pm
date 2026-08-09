@@ -168,7 +168,7 @@ export default function EngagementsTriage({
                                 ? 'Commercial figures follow the rate card policy — managing roles see cost and price here.'
                                 : pricing.available
                                   ? `Cost ${pricing.costPerDay?.formatted}/day · price ${pricing.sellPerDay?.formatted}/day — blended from baseline v${pricing.baselineVersion} (rate card v${pricing.rateCardVersion}), ${pricing.hoursPerDay}h days.`
-                                  : 'No pinned rate card yet — drift surfaces unpriced until a baseline carries one.'}
+                                  : 'No pinned rate card yet — scope creep surfaces unpriced until a baseline carries one.'}
                             {nearestMilestone !== null &&
                                 ` Next milestone: ${nearestMilestone.title}${
                                     nearestMilestone.daysUntil !== null

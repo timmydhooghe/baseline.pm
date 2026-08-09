@@ -69,7 +69,7 @@ class BaselineItem extends Model
          * no audit trail — and leave existing-scope classifications
          * orphaned: unmapped work the triage inbox would never surface
          * again. Unlinking through the model keeps the removal audited and
-         * resets the classification, so the work re-enters drift (FA-9).
+         * resets the classification, so the work re-enters the scope creep queue (FA-9).
          */
         static::deleting(function (BaselineItem $item): void {
             WorkItemLink::query()
