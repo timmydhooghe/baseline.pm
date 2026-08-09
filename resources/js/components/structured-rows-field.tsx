@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -31,6 +32,7 @@ export default function StructuredRowsField({
     defaultRows = [],
     addLabel = 'Add a row',
     hint,
+    errors,
     testId,
 }: {
     name: string;
@@ -39,6 +41,12 @@ export default function StructuredRowsField({
     defaultRows?: Record<string, string | null>[];
     addLabel?: string;
     hint?: string;
+    /**
+     * The form's errors, whole. Server-side messages for these rows come
+     * back keyed by path — `evidence.0.url` — so the row that is actually
+     * wrong is the one that has to show the message.
+     */
+    errors?: Record<string, string | undefined>;
     testId?: string;
 }) {
     const [rows, setRows] = useState<Row[]>(
@@ -102,6 +110,13 @@ export default function StructuredRowsField({
                                     }
                                     className={cn(fieldClass, 'w-full')}
                                 />
+                                <InputError
+                                    message={
+                                        errors?.[
+                                            `${name}.${index}.${column.key}`
+                                        ]
+                                    }
+                                />
                             </div>
                         ))}
                         <Button
@@ -122,6 +137,8 @@ export default function StructuredRowsField({
                     </div>
                 ))
             )}
+
+            <InputError message={errors?.[name]} />
 
             {rows.length === 0 && (
                 <input type="hidden" name={`${name}_cleared`} value="1" />

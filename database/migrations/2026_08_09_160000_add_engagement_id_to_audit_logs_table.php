@@ -61,10 +61,21 @@ return new class extends Migration
      * Public so the resolution can be tested directly: the migration itself
      * only ever runs once, and getting this wrong is silent.
      */
+    /**
+     * Payload keys that name another audited record. An entry that already
+     * knows its engagement can lend it to the record it references — the
+     * only way home for a subject that was deleted after a custom action,
+     * whose hand-written payload never carried the engagement itself.
+     *
+     * @var list<string>
+     */
+    private const array REFERENCE_KEYS = ['change_request_id'];
+
     public function backfill(): void
     {
         $this->backfillFromLiveSubjects();
         $this->backfillFromPayloads();
+        $this->backfillFromReferences();
     }
 
     /**
@@ -152,6 +163,66 @@ return new class extends Migration
             });
 
         foreach ($engagementBySubject as $subjectId => $engagementId) {
+            DB::table('audit_logs')
+                ->where('subject_id', $subjectId)
+                ->whereNull('engagement_id')
+                ->update(['engagement_id' => $engagementId]);
+        }
+    }
+
+    /**
+     * Recover the subjects neither pass could place: a draft change request
+     * discarded during re-triage leaves `change_request.drafted` and
+     * `change_request.discarded` behind, both with payloads written by hand
+     * and neither naming the engagement, and the row itself is gone.
+     *
+     * The work item that drafted it survives, and its own triage entry
+     * records the change request's id — so the entry that knows the
+     * engagement hands it to the entries that do not.
+     */
+    private function backfillFromReferences(): void
+    {
+        /*
+         * Organization-level entries are null by design and always will be,
+         * so only engagement-scoped subjects count as orphaned — otherwise
+         * this pass would scan the whole table on every install.
+         */
+        $orphaned = DB::table('audit_logs')
+            ->whereNull('engagement_id')
+            ->whereIn('subject_type', array_keys(self::SUBJECT_SOURCES))
+            ->distinct()
+            ->pluck('subject_id')
+            ->flip();
+
+        if ($orphaned->isEmpty()) {
+            return;
+        }
+
+        $adopted = [];
+
+        DB::table('audit_logs')
+            ->whereNotNull('engagement_id')
+            ->whereNotNull('payload')
+            ->orderBy('id')
+            ->each(function (object $entry) use (&$adopted, $orphaned): void {
+                $payload = json_decode((string) $entry->payload, true);
+
+                if (! is_array($payload)) {
+                    return;
+                }
+
+                foreach (self::REFERENCE_KEYS as $key) {
+                    $referenced = $payload[$key] ?? null;
+
+                    if (is_string($referenced)
+                        && $orphaned->has($referenced)
+                        && ! array_key_exists($referenced, $adopted)) {
+                        $adopted[$referenced] = (string) $entry->engagement_id;
+                    }
+                }
+            });
+
+        foreach ($adopted as $subjectId => $engagementId) {
             DB::table('audit_logs')
                 ->where('subject_id', $subjectId)
                 ->whereNull('engagement_id')

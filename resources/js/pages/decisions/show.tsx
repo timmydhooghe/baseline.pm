@@ -398,6 +398,7 @@ export default function DecisionsShow({
                                             },
                                         ]}
                                         defaultRows={decision.alternatives}
+                                        errors={errors}
                                     />
                                     <StructuredRowsField
                                         name="participants"
@@ -417,6 +418,7 @@ export default function DecisionsShow({
                                             },
                                         ]}
                                         defaultRows={decision.participants}
+                                        errors={errors}
                                     />
                                     <StructuredRowsField
                                         name="evidence"
@@ -435,6 +437,7 @@ export default function DecisionsShow({
                                             },
                                         ]}
                                         defaultRows={decision.evidence}
+                                        errors={errors}
                                     />
                                     <LinkedRecordsField
                                         records={options.records}

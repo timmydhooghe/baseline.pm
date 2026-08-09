@@ -10,9 +10,11 @@ use App\Enums\RecordVisibility;
 use App\Enums\RiskRating;
 use App\Enums\StakeholderRole;
 use App\Enums\UserRole;
+use App\Enums\WorkItemTriageStatus;
 use App\Models\AuditLog;
 use App\Models\Baseline;
 use App\Models\BaselineItem;
+use App\Models\ChangeRequest;
 use App\Models\Customer;
 use App\Models\Decision;
 use App\Models\Deliverable;
@@ -20,6 +22,7 @@ use App\Models\Dependency;
 use App\Models\Engagement;
 use App\Models\Stakeholder;
 use App\Models\User;
+use App\Models\WorkItem;
 use App\ValueObjects\Money;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
@@ -824,4 +827,69 @@ test('a transcript keeps its raw evidence even when the editable fields are cut'
         // reader can still check the proposal against what was actually said.
         ->and($draft->transcript_excerpt)->toBe(trim($line))
         ->and(mb_strlen((string) $draft->transcript_excerpt))->toBeGreaterThan(40000);
+});
+
+test('history survives a draft change request discarded during re-triage', function () {
+    ['manager' => $manager, 'engagement' => $engagement] = hardeningSetup();
+
+    $this->actingAs($manager);
+
+    $baseline = Baseline::factory()->for($engagement->organization)->for($engagement)->create();
+    $item = BaselineItem::factory()->for($engagement->organization)->for($baseline)->completeDeliverable()->create();
+    $baseline->forceFill(['status' => BaselineStatus::Approved, 'approved_at' => now()])->save();
+
+    $workItem = WorkItem::factory()
+        ->for($engagement->organization)
+        ->for($engagement)
+        ->create(['title' => 'Unmapped export job']);
+
+    // Drift triaged as a potential change drafts a change request…
+    $workItem->triage(WorkItemTriageStatus::PotentialChange, $manager);
+    $changeRequestId = $workItem->refresh()->changeRequest?->id;
+
+    expect($changeRequestId)->not->toBeNull();
+
+    // …and reclassifying the item afterwards discards and deletes it.
+    $workItem->triage(WorkItemTriageStatus::ExistingScope, $manager, deliverable: $item);
+
+    expect(ChangeRequest::query()->whereKey($changeRequestId)->exists())->toBeFalse()
+        ->and(AuditLog::query()->where('subject_id', $changeRequestId)->count())->toBeGreaterThan(0);
+
+    // Exactly the state a pre-migration database is in.
+    DB::table('audit_logs')->update(['engagement_id' => null]);
+
+    $migration = require database_path('migrations/2026_08_09_160000_add_engagement_id_to_audit_logs_table.php');
+    $migration->backfill();
+
+    $entries = DB::table('audit_logs')->where('subject_id', $changeRequestId)->get();
+
+    expect($entries->pluck('engagement_id')->unique()->all())->toBe([$engagement->id]);
+
+    $this->get(route('engagements.audit.show', $engagement))
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('entries.data', fn ($data) => collect($data)
+                ->contains(fn (array $entry): bool => $entry['action'] === 'change_request.discarded')));
+});
+
+test('a bad row in a structured list reports against that row', function () {
+    ['manager' => $manager, 'engagement' => $engagement] = hardeningSetup();
+
+    $draft = $engagement->recordDecision(['title' => 'Draft', 'context' => 'Context.'], $manager);
+
+    $this->actingAs($manager)
+        ->patch(route('decisions.update', $draft), [
+            'title' => 'Draft',
+            'context' => 'Context.',
+            'visibility' => RecordVisibility::Internal->value,
+            'evidence' => [
+                ['label' => 'Steering minutes', 'url' => 'https://example.test/minutes'],
+                ['label' => 'Broken link', 'url' => 'not-a-url'],
+            ],
+            'alternatives' => [['option' => str_repeat('x', 300), 'why_not' => 'Too long.']],
+        ])
+        // The path names the offending row, which is what the form renders against.
+        ->assertInvalid(['evidence.1.url', 'alternatives.0.option'])
+        ->assertValid(['evidence.0.url']);
+
+    expect($draft->refresh()->evidence)->toBeNull();
 });
