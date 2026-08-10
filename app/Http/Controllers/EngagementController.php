@@ -202,6 +202,11 @@ class EngagementController extends Controller
                 ],
                 'auditEntries' => AuditLog::query()->where('engagement_id', $engagement->id)->count(),
             ],
+            'reporting' => [
+                'published' => $engagement->reports()->count(),
+                'due' => count($engagement->dueReportWeeks()),
+                'lastWeekLabel' => $engagement->reports()->first()?->label(),
+            ],
             'lifecycle' => collect(EngagementStatus::cases())
                 ->map(fn (EngagementStatus $status): array => [
                     'value' => $status->value,

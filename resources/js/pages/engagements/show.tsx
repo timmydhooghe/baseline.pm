@@ -37,6 +37,7 @@ import { index as decisionsIndex } from '@/routes/engagements/decisions';
 import { index as deliverablesIndex } from '@/routes/engagements/deliverables';
 import { index as dependenciesIndex } from '@/routes/engagements/dependencies';
 import { show as marginShow } from '@/routes/engagements/margin';
+import { index as reportsIndex } from '@/routes/engagements/reports';
 import { index as risksIndex } from '@/routes/engagements/risks';
 import { show as workShow } from '@/routes/engagements/work';
 import type {
@@ -86,6 +87,12 @@ type GovernanceSummary = {
     auditEntries: number;
 };
 
+type ReportingSummary = {
+    published: number;
+    due: number;
+    lastWeekLabel: string | null;
+};
+
 type Props = {
     engagement: EngagementDetail;
     baseline: BaselineSummary | null;
@@ -93,6 +100,7 @@ type Props = {
     changeControl: ChangeControlSummary;
     acceptance: EngagementAcceptanceSummary;
     governance: GovernanceSummary;
+    reporting: ReportingSummary;
     lifecycle: SelectOption[];
     position: EngagementPositionSummary;
     can: { transition: boolean; viewCustomer: boolean; viewAudit: boolean };
@@ -105,6 +113,7 @@ export default function EngagementsShow({
     changeControl,
     acceptance,
     governance,
+    reporting,
     lifecycle,
     position,
     can,
@@ -624,6 +633,49 @@ export default function EngagementsShow({
                             </Link>
                         </div>
                     )}
+                </div>
+
+                <div
+                    className="border-[1.5px] border-ink dark:border-paper"
+                    data-test="reporting-card"
+                >
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b-[1.5px] border-ink px-4 py-3 dark:border-paper">
+                        <span className="font-plex-mono text-[11px] font-semibold tracking-[0.08em] text-stone uppercase dark:text-fog">
+                            Reporting
+                        </span>
+                        {reporting.lastWeekLabel !== null && (
+                            <span className="font-plex-mono text-[11px] font-semibold uppercase">
+                                Latest: {reporting.lastWeekLabel}
+                            </span>
+                        )}
+                    </div>
+                    <Link
+                        href={reportsIndex(engagement.id)}
+                        prefetch
+                        data-test="open-reports"
+                        className="flex flex-col gap-1 px-4 py-3 transition-colors hover:bg-ink/5 dark:hover:bg-paper/5"
+                    >
+                        <span className="font-plex-mono text-[11px] font-semibold text-stone uppercase dark:text-fog">
+                            Weekly reports
+                        </span>
+                        <span className="font-plex-mono text-[18px] font-semibold">
+                            {reporting.published} published
+                        </span>
+                        <span
+                            className={cn(
+                                'text-[12px]',
+                                reporting.due > 0
+                                    ? 'font-semibold text-rust'
+                                    : 'text-stone dark:text-fog',
+                            )}
+                        >
+                            {reporting.due > 0
+                                ? `${reporting.due} week${reporting.due === 1 ? '' : 's'} awaiting publication`
+                                : reporting.published === 0
+                                  ? 'Drafts assemble once a finished week exists under an approved baseline.'
+                                  : 'Every finished week has gone out.'}
+                        </span>
+                    </Link>
                 </div>
 
                 {canRequestFinalAcceptance && (

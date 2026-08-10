@@ -268,6 +268,21 @@ test('the ledger lists the weeks still owed a report beside the published ones',
         ->assertRedirect(route('reports.show', $report));
 });
 
+test('the engagement hub carries the report ledger', function () {
+    ['manager' => $manager, 'engagement' => $engagement] = reportSetup();
+
+    $engagement->publishWeeklyReport(lastWeek(), $manager);
+
+    $this->actingAs($manager)
+        ->get(route('engagements.show', $engagement))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('engagements/show')
+            ->where('reporting.published', 1)
+            ->where('reporting.due', 3)
+            ->where('reporting.lastWeekLabel', BurnWeek::labelFor(lastWeek())));
+});
+
 test('a draft derives live and keeps commercials from roles without rate card access', function () {
     ['manager' => $manager, 'organization' => $organization, 'engagement' => $engagement] = reportSetup();
 
