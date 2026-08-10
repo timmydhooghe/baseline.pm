@@ -7,4 +7,6 @@ export type * from './governance';
 export type * from './integration';
 export type * from './money';
 export type * from './navigation';
+export type * from './report';
+export type * from './today';
 export type * from './ui';

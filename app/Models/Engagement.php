@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Actions\Governance\ProposeDecisionsFromTranscript;
 use App\Actions\Money\MarginForecast;
 use App\Actions\Money\WeeklyBurnSuggestion;
+use App\Actions\Reporting\WeeklyReportDraft;
 use App\Enums\BaselineStatus;
 use App\Enums\BurnSource;
 use App\Enums\ChangeRequestStatus;
@@ -20,6 +21,7 @@ use App\Jobs\SyncIntegrationConnection;
 use App\Models\Concerns\BelongsToOrganization;
 use App\Models\Concerns\RecordsAuditLog;
 use App\Notifications\FinalAcceptanceSubmitted;
+use App\Notifications\WeeklyReportPublished;
 use App\ValueObjects\Money;
 use Carbon\CarbonImmutable;
 use Database\Factories\EngagementFactory;
@@ -62,6 +64,7 @@ use LogicException;
  * @property-read Collection<int, Risk> $risks
  * @property-read Collection<int, Dependency> $dependencies
  * @property-read Collection<int, BurnWeek> $burnWeeks
+ * @property-read Collection<int, Report> $reports
  */
 #[Fillable(['name'])]
 class Engagement extends Model
@@ -783,6 +786,49 @@ class Engagement extends Model
      */
     public function unrecordedBurnWeeks(?DateTimeInterface $asOf = null): array
     {
+        $recorded = $this->currentBurnWeeks()
+            ->pluck('week_start')
+            ->map(fn (mixed $date): string => BurnWeek::startOfWeekFor($date)->toDateString())
+            ->all();
+
+        return array_values(array_filter(
+            $this->finishedWeeks($asOf),
+            fn (CarbonImmutable $week): bool => ! in_array($week->toDateString(), $recorded, true),
+        ));
+    }
+
+    /**
+     * The weeks whose report has not been published (FA-25, FA-26) — the
+     * report-draft queue Today surfaces. A draft is derived, never stored, so
+     * a due week is a draft by existing.
+     *
+     * @return list<CarbonImmutable>
+     */
+    public function dueReportWeeks(?DateTimeInterface $asOf = null): array
+    {
+        $published = $this->reports()
+            ->pluck('week_start')
+            ->map(fn (mixed $date): string => BurnWeek::startOfWeekFor($date)->toDateString())
+            ->all();
+
+        return array_values(array_filter(
+            $this->finishedWeeks($asOf),
+            fn (CarbonImmutable $week): bool => ! in_array($week->toDateString(), $published, true),
+        ));
+    }
+
+    /**
+     * The finished weeks of the execution window: from the approved
+     * baseline's start to the most recently completed week, clamped to the
+     * planned end. The current week is never late until it is over, and a
+     * completed or archived engagement has stopped accruing weeks. This is
+     * the calendar both weekly ledgers — burn and reports — are read against,
+     * so a week cannot be due in one and unknown to the other.
+     *
+     * @return list<CarbonImmutable>
+     */
+    protected function finishedWeeks(?DateTimeInterface $asOf = null): array
+    {
         $baseline = $this->approvedBaseline();
 
         if ($baseline === null || in_array($this->status, [EngagementStatus::Completed, EngagementStatus::Archived], true)) {
@@ -797,20 +843,89 @@ class Engagement extends Model
             $until = $planned;
         }
 
-        $recorded = $this->currentBurnWeeks()
-            ->pluck('week_start')
-            ->map(fn (mixed $date): string => BurnWeek::startOfWeekFor($date)->toDateString())
-            ->all();
-
-        $missing = [];
+        $weeks = [];
 
         for ($week = $from; ! $week->greaterThan($until); $week = $week->addWeek()) {
-            if (! in_array($week->toDateString(), $recorded, true)) {
-                $missing[] = $week;
-            }
+            $weeks[] = $week;
         }
 
-        return $missing;
+        return $weeks;
+    }
+
+    /**
+     * Publish the week's report (FA-26): derive both variants from evidence,
+     * freeze them as twin snapshots — the customer one built without cost or
+     * margin — and send every stakeholder their personally signed link. One
+     * report per week, immutable once out: a correction would be a new claim
+     * about a week the customer was already told about, and the trail must
+     * show what was actually sent.
+     *
+     * Serialized under the engagement row lock so two managers publishing the
+     * same week cannot both find it unpublished and send twice.
+     */
+    public function publishWeeklyReport(DateTimeInterface|string $week, ?User $publisher = null): Report
+    {
+        $this->guardWritable(__('Archived engagements are read-only.'), 'week_start');
+
+        $weekStart = BurnWeek::startOfWeekFor($week);
+
+        if ($weekStart->isFuture()) {
+            throw ValidationException::withMessages([
+                'week_start' => __('A report covers a week that has started — this one has not.'),
+            ]);
+        }
+
+        if ($this->approvedBaseline() === null) {
+            throw ValidationException::withMessages([
+                'week_start' => __('Weekly reports read the engagement against its approved baseline — approve one first.'),
+            ]);
+        }
+
+        $draft = app(WeeklyReportDraft::class);
+
+        $report = DB::transaction(function () use ($draft, $weekStart, $publisher): Report {
+            self::query()->whereKey($this->id)->lockForUpdate()->first();
+
+            if ($this->reports()->whereDate('week_start', $weekStart->toDateString())->exists()) {
+                throw ValidationException::withMessages([
+                    'week_start' => __('The report for the week of :week is already published — published reports are immutable.', [
+                        'week' => BurnWeek::labelFor($weekStart),
+                    ]),
+                ]);
+            }
+
+            $report = new Report([
+                'week_start' => $weekStart,
+                'published_at' => now(),
+                'published_by' => $publisher?->id,
+            ]);
+            $report->organization_id = $this->organization_id;
+            $report->engagement_id = $this->id;
+            $report->save();
+
+            $review = Snapshot::capture($report, $draft($this, $weekStart, internal: true), $publisher);
+            $customer = Snapshot::capture($report, $draft($this, $weekStart, internal: false), $publisher);
+
+            $report->review_snapshot_id = $review->id;
+            $report->customer_snapshot_id = $customer->id;
+            $report->save();
+
+            AuditLog::record('report.published', $report, [
+                'week_start' => $weekStart->toDateString(),
+                'week' => BurnWeek::labelFor($weekStart),
+                'review_snapshot_id' => $review->id,
+                'customer_snapshot_id' => $customer->id,
+                'published_by' => $publisher?->name,
+            ]);
+
+            return $report;
+        });
+
+        foreach ($this->customer->stakeholders as $stakeholder) {
+            $stakeholder->notify(new WeeklyReportPublished($report));
+        }
+
+        return $report;
     }
 
     /**
@@ -1200,6 +1315,16 @@ class Engagement extends Model
     public function burnWeeks(): HasMany
     {
         return $this->hasMany(BurnWeek::class)->orderByDesc('week_start')->orderByDesc('recorded_at');
+    }
+
+    /**
+     * Every published weekly report, newest week first (FA-26).
+     *
+     * @return HasMany<Report, $this>
+     */
+    public function reports(): HasMany
+    {
+        return $this->hasMany(Report::class)->orderByDesc('week_start');
     }
 
     /**

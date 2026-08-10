@@ -33,10 +33,13 @@ use App\Http\Controllers\PortalChangeRequestController;
 use App\Http\Controllers\PortalDecisionController;
 use App\Http\Controllers\PortalDeliverableController;
 use App\Http\Controllers\PortalFinalAcceptanceController;
+use App\Http\Controllers\PortalReportController;
 use App\Http\Controllers\RateCardController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RiskController;
 use App\Http\Controllers\RiskExposureController;
 use App\Http\Controllers\StakeholderController;
+use App\Http\Controllers\TodayController;
 use App\Http\Controllers\TriageController;
 use App\Http\Controllers\WorkController;
 use App\Http\Controllers\WorkItemController;
@@ -48,7 +51,7 @@ use Illuminate\Support\Facades\Route;
 Route::inertia('/', 'welcome')->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function (): void {
-    Route::inertia('dashboard', 'dashboard')->name('dashboard');
+    Route::get('dashboard', [TodayController::class, 'show'])->name('dashboard');
 
     Route::get('engagements', [EngagementController::class, 'index'])->name('engagements.index');
     Route::post('engagements', [EngagementController::class, 'store'])->name('engagements.store');
@@ -125,6 +128,11 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
 
     Route::get('engagements/{engagement}/audit', [EngagementAuditController::class, 'show'])->name('engagements.audit.show');
 
+    Route::get('engagements/{engagement}/reports', [ReportController::class, 'index'])->name('engagements.reports.index');
+    Route::post('engagements/{engagement}/reports', [ReportController::class, 'store'])->name('engagements.reports.store');
+    Route::get('engagements/{engagement}/reports/draft/{week}', [ReportController::class, 'draft'])->name('engagements.reports.draft');
+    Route::get('reports/{report}', [ReportController::class, 'show'])->name('reports.show');
+
     Route::get('customers', [CustomerController::class, 'index'])->name('customers.index');
     Route::post('customers', [CustomerController::class, 'store'])->name('customers.store');
     Route::get('customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
@@ -182,6 +190,7 @@ Route::prefix('portal')->name('portal.')->group(function (): void {
         Route::post('final-acceptances/{finalAcceptance}/review/{stakeholder}', [PortalFinalAcceptanceController::class, 'store'])
             ->middleware('throttle:10,1')
             ->name('final-acceptances.respond');
+        Route::get('reports/{report}/view/{stakeholder}', [PortalReportController::class, 'show'])->name('reports.show');
         Route::get('decisions/{decision}/acknowledge/{stakeholder}', [PortalDecisionController::class, 'show'])->name('decisions.show');
         Route::post('decisions/{decision}/acknowledge/{stakeholder}', [PortalDecisionController::class, 'store'])
             ->middleware('throttle:10,1')
