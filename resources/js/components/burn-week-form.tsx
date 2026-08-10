@@ -21,9 +21,16 @@ type Row = {
     key: number;
     roleId: string;
     personName: string;
+    /**
+     * The colleague this row was prefilled for, and their name as it stood.
+     * Editing the name away from it drops the link: the name is what a human
+     * typed, the colleague is an inference, and a row that reads "Bob" while
+     * pointing at Sara's record is worse than one that points at nobody.
+     */
     userId: string | null;
+    userName: string | null;
     days: string;
-    /** What the prefill proposed, so an edited figure records as manual. */
+    /** What the prefill proposed, so an edited figure previews as manual. */
     suggestedDays: string;
     suggestedSource: BurnSource;
     basis: string;
@@ -42,8 +49,10 @@ const days = (value: number) => String(Math.round(value * 100) / 100);
  * beside each line derives from the profile's rate as you type, and the
  * server prices the week again from the same rate card when it records it.
  *
- * A prefilled figure that gets edited records as manual — the ledger says who
- * decided the number, not who first proposed it.
+ * The source badge is a preview, not a claim. Where a figure came from is
+ * decided server-side against the worklogs and the plan when the week is
+ * recorded — this only shows what that is likely to say, so an edited
+ * suggestion reads as manual before it is submitted rather than after.
  */
 export default function BurnWeekForm({
     engagementId,
@@ -58,6 +67,7 @@ export default function BurnWeekForm({
             roleId: line.roleId ?? '',
             personName: line.personName ?? '',
             userId: line.userId,
+            userName: line.personName,
             days: days(line.days),
             suggestedDays: days(line.days),
             suggestedSource: line.source,
@@ -73,8 +83,18 @@ export default function BurnWeekForm({
     const costOf = (row: Row) =>
         Math.round((Number(row.days) || 0) * rateOf(row.roleId));
 
+    /**
+     * A preview of what the server will derive: a suggestion whose days were
+     * edited is no longer that suggestion. The server decides for real.
+     */
     const sourceOf = (row: Row): BurnSource =>
         row.days === row.suggestedDays ? row.suggestedSource : 'manual';
+
+    /** The colleague link survives only while the name still reads as theirs. */
+    const userIdOf = (row: Row): string | null =>
+        row.userId !== null && row.personName.trim() === row.userName
+            ? row.userId
+            : null;
 
     const total = rows.reduce((sum, row) => sum + costOf(row), 0);
     const update = (key: number, patch: Partial<Row>) =>
@@ -133,11 +153,11 @@ export default function BurnWeekForm({
                                                 )}
                                                 data-test={`burn-person-${index}`}
                                             />
-                                            {row.userId !== null && (
+                                            {userIdOf(row) !== null && (
                                                 <input
                                                     type="hidden"
                                                     name={`lines[${index}][user_id]`}
-                                                    value={row.userId}
+                                                    value={userIdOf(row) ?? ''}
                                                 />
                                             )}
                                             <p className="mt-1 max-w-56 text-[11px] text-stone dark:text-fog">
@@ -230,14 +250,13 @@ export default function BurnWeekForm({
                                                 : formatCents(costOf(row))}
                                         </td>
                                         <td className="px-3 py-2 align-top">
-                                            <span className="border border-ink/40 px-1.5 py-0.5 font-plex-mono text-[10px] font-semibold uppercase dark:border-paper/40">
+                                            <span
+                                                title="Derived when the week is recorded, from the worklogs and the plan."
+                                                className="border border-ink/40 px-1.5 py-0.5 font-plex-mono text-[10px] font-semibold uppercase dark:border-paper/40"
+                                                data-test={`burn-source-${index}`}
+                                            >
                                                 {sourceOf(row)}
                                             </span>
-                                            <input
-                                                type="hidden"
-                                                name={`lines[${index}][source]`}
-                                                value={sourceOf(row)}
-                                            />
                                         </td>
                                         <td className="px-3 py-2 align-top">
                                             <Button
@@ -288,6 +307,7 @@ export default function BurnWeekForm({
                                             roleId: '',
                                             personName: '',
                                             userId: null,
+                                            userName: null,
                                             days: '',
                                             suggestedDays: '',
                                             suggestedSource: 'manual',

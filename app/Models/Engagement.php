@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Actions\Governance\ProposeDecisionsFromTranscript;
 use App\Actions\Money\MarginForecast;
+use App\Actions\Money\WeeklyBurnSuggestion;
 use App\Enums\BaselineStatus;
 use App\Enums\BurnSource;
 use App\Enums\ChangeRequestStatus;
@@ -524,7 +525,11 @@ class Engagement extends Model
      * would otherwise each find no current entry, both write one, and leave
      * cost-to-date double counting a week nobody worked twice.
      *
-     * @param  list<array{rate_card_role_id: string, days: float|string, person_name?: string|null, user_id?: string|null, source?: BurnSource|string|null}>  $lines
+     * Provenance is derived here, never accepted: a caller can claim a figure
+     * came from logged time, and the row it lands on is immutable, so the
+     * claim is checked against the worklogs and the plan before it is frozen.
+     *
+     * @param  list<array{rate_card_role_id: string, days: float|string, person_name?: string|null, user_id?: string|null}>  $lines
      */
     public function recordBurnWeek(DateTimeInterface|string $week, array $lines, ?User $actor = null, ?string $note = null): BurnWeek
     {
@@ -564,7 +569,11 @@ class Engagement extends Model
          * be right the first time, because the row it lands on can never be
          * updated again.
          */
-        $priced = $this->priceBurnLines($lines, $version->roles->keyBy('id'));
+        $priced = $this->priceBurnLines(
+            $lines,
+            $version->roles->keyBy('id'),
+            app(WeeklyBurnSuggestion::class)->provenance($this, $weekStart),
+        );
         $total = array_reduce(
             $priced,
             fn (Money $sum, array $line): Money => $sum->add($line['cost']),
@@ -626,17 +635,20 @@ class Engagement extends Model
     /**
      * Turn the submitted lines into priced burn entries, refusing anything
      * that would put a figure on the ledger nobody can trace: a role from
-     * another rate card version, days that were not spent, or the same
-     * person booked twice in one week.
+     * another rate card version, days that were not spent, the same person
+     * booked twice in one week, or one person's week adding up to more than
+     * seven days across their lines.
      *
-     * @param  list<array{rate_card_role_id: string, days: float|string, person_name?: string|null, user_id?: string|null, source?: BurnSource|string|null}>  $lines
+     * @param  list<array{rate_card_role_id: string, days: float|string, person_name?: string|null, user_id?: string|null}>  $lines
      * @param  SupportCollection<string, RateCardRole>  $roles
+     * @param  array{worklog: array<string, float>, progress: array<string, float>}  $provenance
      * @return list<array<string, mixed>>
      */
-    protected function priceBurnLines(array $lines, SupportCollection $roles): array
+    protected function priceBurnLines(array $lines, SupportCollection $roles, array $provenance): array
     {
         $priced = [];
         $seen = [];
+        $daysPerPerson = [];
 
         foreach ($lines as $index => $line) {
             $role = $roles->get($line['rate_card_role_id']);
@@ -656,7 +668,9 @@ class Engagement extends Model
             }
 
             $person = $line['person_name'] ?? null;
-            $key = $role->id.'|'.($person ?? '');
+            $person = is_string($person) && mb_trim($person) !== '' ? mb_trim($person) : null;
+            $folded = BurnEntry::normalizePerson($person);
+            $key = $role->id.'|'.($folded ?? '');
 
             if (isset($seen[$key])) {
                 throw ValidationException::withMessages([
@@ -666,19 +680,76 @@ class Engagement extends Model
 
             $seen[$key] = true;
 
+            if ($folded !== null) {
+                $daysPerPerson[$folded] = ($daysPerPerson[$folded] ?? 0.0) + $days;
+
+                if ($daysPerPerson[$folded] > 7) {
+                    throw ValidationException::withMessages([
+                        "lines.{$index}.days" => __('A week holds seven days — :person cannot have spent more across their lines.', [
+                            'person' => $person,
+                        ]),
+                    ]);
+                }
+            }
+
             $priced[] = [
                 'rate_card_role_id' => $role->id,
                 'role_name' => $role->name,
-                'user_id' => $line['user_id'] ?? null,
+                'user_id' => $this->resolveBurnUserId($line['user_id'] ?? null, $person),
                 'person_name' => $person,
                 'days' => $days,
-                'source' => $line['source'] ?? BurnSource::Manual,
+                'source' => $this->deriveBurnSource($provenance, $role->name, $person, $days),
                 'cost_per_day' => $role->cost_per_day,
                 'cost' => Money::fromCents((int) round($days * $role->cost_per_day->amount)),
             ];
         }
 
         return $priced;
+    }
+
+    /**
+     * Where a burn figure actually came from (FA-16). A line only counts as
+     * logged time when that person really logged those days that week, and
+     * only counts as a progress estimate when it still matches the estimate
+     * the plan produces. Everything else — an edited suggestion, a figure
+     * against a profile that logged nothing, a number a client merely
+     * labelled — is what it is: a manual entry.
+     *
+     * Derived rather than accepted because the row it lands on is immutable:
+     * a wrong provenance recorded here can never be corrected in place.
+     *
+     * @param  array{worklog: array<string, float>, progress: array<string, float>}  $provenance
+     */
+    protected function deriveBurnSource(array $provenance, string $roleName, ?string $person, float $days): BurnSource
+    {
+        $matches = fn (?float $derived): bool => $derived !== null && abs($derived - $days) < 0.005;
+
+        return match (true) {
+            $person !== null && $matches($provenance['worklog'][$person] ?? null) => BurnSource::Worklog,
+            $person === null && $matches($provenance['progress'][$roleName] ?? null) => BurnSource::Progress,
+            default => BurnSource::Manual,
+        };
+    }
+
+    /**
+     * The colleague a line is attributed to, kept only while the name still
+     * belongs to them. Editing a prefilled row from one person to another
+     * leaves the old reference behind, and a week that says "Bob" while
+     * pointing at Sara's record is worse than one that names Bob and points
+     * at nobody — the name is what a human typed, the link is an inference.
+     */
+    protected function resolveBurnUserId(?string $userId, ?string $person): ?string
+    {
+        if ($userId === null || $person === null) {
+            return null;
+        }
+
+        $user = User::query()
+            ->where('organization_id', $this->organization_id)
+            ->whereKey($userId)
+            ->first();
+
+        return $user?->name === $person ? $user->id : null;
     }
 
     /**

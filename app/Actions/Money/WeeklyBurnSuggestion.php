@@ -172,7 +172,7 @@ class WeeklyBurnSuggestion
          * manager resolves the overlap in review, which is the one place a
          * guess about who did what belongs.
          */
-        foreach ($this->plannedDaysByRoleName($baseline) as $roleName => $planned) {
+        foreach ($this->progressDays($baseline, $history['roleDays'], $progress) as $roleName => $estimate) {
             if (isset($covered[$roleName])) {
                 continue;
             }
@@ -183,34 +183,78 @@ class WeeklyBurnSuggestion
                 continue;
             }
 
-            /*
-             * The progress-derived suggestion: how much of the profile's
-             * planned effort the delivered progress implies should be spent
-             * by now, minus what earlier weeks already recorded. Never
-             * negative — a profile that ran ahead of progress is not owed
-             * days back.
-             */
-            $recorded = $history['roleDays'][$roleName] ?? 0.0;
-            $expected = $planned * ($progress ?? 0.0);
-            $suggested = round(max(0.0, $expected - $recorded), 2);
-
             $lines[] = $this->line(
                 role: $role,
                 personName: null,
                 userId: null,
-                days: $suggested,
+                days: $estimate['days'],
                 source: BurnSource::Progress,
                 basis: $progress === null
                     ? __('No progress recorded yet — enter the days by hand.')
                     : __(':progress% of :planned planned days, :recorded already recorded.', [
                         'progress' => $this->number($progress * 100),
-                        'planned' => $this->number($planned),
-                        'recorded' => $this->number($recorded),
+                        'planned' => $this->number($estimate['planned']),
+                        'recorded' => $this->number($estimate['recorded']),
                     ]),
             );
         }
 
         return $lines;
+    }
+
+    /**
+     * What each figure in a week could honestly have come from, derived from
+     * the same worklogs and plan the prefill was built on (FA-16).
+     *
+     * Recording reads this rather than the source the form posted: a client
+     * can claim a number came from logged time, and the week it lands in is
+     * immutable, so the claim has to be checkable. Logged days are keyed by
+     * person, progress estimates by profile.
+     *
+     * @return array{worklog: array<string, float>, progress: array<string, float>}
+     */
+    public function provenance(Engagement $engagement, DateTimeInterface|string $week): array
+    {
+        $weekStart = BurnWeek::startOfWeekFor($week);
+        $baseline = $engagement->approvedBaseline();
+
+        return [
+            'worklog' => $this->loggedDaysByAuthor($engagement, $weekStart),
+            'progress' => $baseline === null ? [] : array_map(
+                fn (array $estimate): float => $estimate['days'],
+                $this->progressDays(
+                    $baseline,
+                    $this->history($engagement, $weekStart)['roleDays'],
+                    $this->weightedProgress($engagement),
+                ),
+            ),
+        ];
+    }
+
+    /**
+     * The progress-derived estimate per profile: how much of its planned
+     * effort the delivered progress implies should be spent by now, minus
+     * what earlier weeks already recorded. Never negative — a profile that
+     * ran ahead of progress is not owed days back.
+     *
+     * @param  array<string, float>  $recorded
+     * @return array<string, array{days: float, planned: float, recorded: float}>
+     */
+    private function progressDays(Baseline $baseline, array $recorded, ?float $progress): array
+    {
+        $estimates = [];
+
+        foreach ($this->plannedDaysByRoleName($baseline) as $roleName => $planned) {
+            $spent = $recorded[$roleName] ?? 0.0;
+
+            $estimates[$roleName] = [
+                'days' => round(max(0.0, $planned * ($progress ?? 0.0) - $spent), 2),
+                'planned' => $planned,
+                'recorded' => $spent,
+            ];
+        }
+
+        return $estimates;
     }
 
     /**
@@ -268,6 +312,12 @@ class WeeklyBurnSuggestion
      * the days recorded per profile, and the profile each person was last
      * recorded against.
      *
+     * Read oldest first, so the later week wins when somebody changed
+     * profile. The ordering is a reorder(), not an addition: burnWeeks()
+     * already sorts newest first for the ledger, and appending a second
+     * clause would leave that first sort in charge and quietly hand the
+     * oldest assignment the last word.
+     *
      * @return array{roleDays: array<string, float>, personRoles: array<string, string>}
      */
     private function history(Engagement $engagement, CarbonImmutable $weekStart): array
@@ -276,7 +326,8 @@ class WeeklyBurnSuggestion
             ->whereNull('superseded_at')
             ->whereDate('week_start', '<', $weekStart->toDateString())
             ->with('entries')
-            ->orderBy('week_start')
+            ->reorder('week_start')
+            ->orderBy('recorded_at')
             ->get();
 
         $roleDays = [];

@@ -72,6 +72,22 @@ class BurnEntry extends Model
     }
 
     /**
+     * One person, however their name was typed. Folding and trimming is what
+     * makes "the same person" mean the same person across the lines of a
+     * week — without it, "Sara" and "sara " each get their own seven days.
+     */
+    public static function normalizePerson(mixed $name): ?string
+    {
+        if (! is_string($name)) {
+            return null;
+        }
+
+        $trimmed = mb_trim($name);
+
+        return $trimmed === '' ? null : mb_strtolower($trimmed);
+    }
+
+    /**
      * @return BelongsTo<BurnWeek, $this>
      */
     public function burnWeek(): BelongsTo

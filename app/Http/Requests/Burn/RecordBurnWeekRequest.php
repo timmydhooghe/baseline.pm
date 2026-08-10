@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests\Burn;
 
-use App\Enums\BurnSource;
+use App\Models\BurnEntry;
 use App\Models\BurnWeek;
 use App\Models\Engagement;
 use App\Models\RateCardRole;
@@ -17,6 +17,11 @@ use Illuminate\Validation\Validator;
  * — every line prices from the rate card role it names, so nothing here
  * accepts an amount. Roles must belong to the version the engagement is
  * priced against, and each person or profile carries one line.
+ *
+ * Provenance is deliberately absent from these rules: where a figure came
+ * from is derived at recording time from the worklogs and the plan, never
+ * claimed by the form. A client that posted `worklog` beside a hand-typed
+ * number would freeze a lie into an immutable snapshot.
  */
 class RecordBurnWeekRequest extends FormRequest
 {
@@ -58,16 +63,22 @@ class RecordBurnWeekRequest extends FormRequest
                 'uuid',
                 Rule::exists(User::class, 'id')->where('organization_id', $engagement?->organization_id),
             ],
-            'lines.*.source' => ['required', Rule::enum(BurnSource::class)],
         ];
     }
 
     /**
      * A person cannot spend the same day twice, and one week is seven days
-     * long however hard it was. Both refusals belong here rather than in a
-     * database constraint: "the same person" is a name plus a profile, and
-     * the seven-day ceiling only applies to a line that names somebody — a
-     * profile line aggregates a whole team's week.
+     * long however hard it was.
+     *
+     * The ceiling counts a person's whole week, not each of their lines:
+     * somebody who split five developer days and five lead days across two
+     * rows still claims ten days out of seven, and the resulting burn would
+     * be frozen wrong. Names are compared folded and trimmed, so a stray
+     * capital cannot split one person into two.
+     *
+     * A line naming nobody is exempt — a profile row aggregates a whole
+     * team's week, and a team can legitimately spend more days than a week
+     * has.
      *
      * @return array<int, callable(Validator): void>
      */
@@ -76,13 +87,15 @@ class RecordBurnWeekRequest extends FormRequest
         return [
             function (Validator $validator): void {
                 $seen = [];
+                $daysPerPerson = [];
+                $lastIndexPerPerson = [];
 
                 foreach ((array) $this->input('lines', []) as $index => $line) {
                     if (! is_array($line)) {
                         continue;
                     }
 
-                    $person = $line['person_name'] ?? null;
+                    $person = BurnEntry::normalizePerson($line['person_name'] ?? null);
                     $key = ($line['rate_card_role_id'] ?? '').'|'.($person ?? '');
 
                     if (isset($seen[$key])) {
@@ -94,12 +107,26 @@ class RecordBurnWeekRequest extends FormRequest
 
                     $seen[$key] = true;
 
-                    if ($person !== null && (float) ($line['days'] ?? 0) > 7) {
-                        $validator->errors()->add(
-                            "lines.{$index}.days",
-                            __('A week holds seven days — :person cannot have spent more.', ['person' => $person]),
-                        );
+                    if ($person === null) {
+                        continue;
                     }
+
+                    $daysPerPerson[$person] = ($daysPerPerson[$person] ?? 0.0) + (float) ($line['days'] ?? 0);
+                    $lastIndexPerPerson[$person] = $index;
+                }
+
+                foreach ($daysPerPerson as $person => $days) {
+                    if ($days <= 7) {
+                        continue;
+                    }
+
+                    $validator->errors()->add(
+                        "lines.{$lastIndexPerPerson[$person]}.days",
+                        __('A week holds seven days — :person cannot have spent :days across their lines.', [
+                            'person' => $person,
+                            'days' => rtrim(rtrim(number_format($days, 2, '.', ''), '0'), '.'),
+                        ]),
+                    );
                 }
             },
         ];

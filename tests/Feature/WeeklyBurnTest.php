@@ -25,18 +25,118 @@ it('records a week as an immutable snapshot and moves cost to date', function ()
     ['manager' => $manager, 'engagement' => $engagement, 'developer' => $developer] = burnSetup();
 
     $week = $engagement->recordBurnWeek(lastWeek(), [
-        ['rate_card_role_id' => $developer->id, 'days' => 5, 'person_name' => 'Sara Peeters', 'source' => BurnSource::Worklog],
+        ['rate_card_role_id' => $developer->id, 'days' => 5, 'person_name' => 'Sara Peeters'],
     ], $manager);
 
     expect($week->cost->amount)->toBe(225000)
         ->and($week->week_start->toDateString())->toBe(lastWeek()->toDateString())
         ->and($week->entries)->toHaveCount(1)
         ->and($week->entries->sole()->cost_per_day->amount)->toBe(45000)
-        ->and($week->entries->sole()->source)->toBe(BurnSource::Worklog)
+        /* Nobody logged those days, so they are what they are: typed. */
+        ->and($week->entries->sole()->source)->toBe(BurnSource::Manual)
         ->and($week->rate_card_version_id)->not->toBeNull()
         ->and($engagement->recordedBurn()->amount)->toBe(225000);
 
     expect(AuditLog::query()->where('action', 'burn_week.recorded')->exists())->toBeTrue();
+});
+
+it('derives provenance from the worklogs and the plan rather than the claim', function (): void {
+    ['manager' => $manager, 'engagement' => $engagement, 'developer' => $developer, 'lead' => $lead] = burnSetup();
+
+    $sara = User::factory()->for($engagement->organization)->create(['name' => 'Sara Peeters']);
+    WorkItem::factory()->for($engagement->organization)->for($engagement)->create()
+        ->addManualWorklog(20, lastWeek()->addDay()->toDateString(), $sara);
+
+    $week = $engagement->recordBurnWeek(lastWeek(), [
+        /* Exactly the 20 h logged — genuinely worklog-derived. */
+        ['rate_card_role_id' => $developer->id, 'days' => 2.5, 'person_name' => 'Sara Peeters'],
+        /* Sara's logged days, edited: no longer what the tool said. */
+        ['rate_card_role_id' => $lead->id, 'days' => 1, 'person_name' => 'Bram De Wit', 'source' => 'worklog'],
+    ], $manager);
+
+    $entries = $week->entries->keyBy('person_name');
+
+    expect($entries['Sara Peeters']->source)->toBe(BurnSource::Worklog)
+        /* A claim of "worklog" for somebody who logged nothing is downgraded. */
+        ->and($entries['Bram De Wit']->source)->toBe(BurnSource::Manual);
+});
+
+it('records the progress estimate as such only while it still matches the plan', function (): void {
+    ['manager' => $manager, 'engagement' => $engagement, 'lead' => $lead, 'checkout' => $checkout] = burnSetup();
+
+    /* The €30,000 deliverable is half done: 30% weighted across the €50,000. */
+    Deliverable::query()->where('baseline_item_id', $checkout->id)->sole()->update(['progress' => 50]);
+
+    $week = $engagement->recordBurnWeek(lastWeek(), [
+        /* 30% of the lead's five planned days, untouched. */
+        ['rate_card_role_id' => $lead->id, 'days' => 1.5],
+    ], $manager);
+
+    expect($week->entries->sole()->source)->toBe(BurnSource::Progress);
+
+    $corrected = $engagement->recordBurnWeek(lastWeek(), [
+        ['rate_card_role_id' => $lead->id, 'days' => 2],
+    ], $manager, 'Longer than the estimate');
+
+    expect($corrected->entries->sole()->source)->toBe(BurnSource::Manual);
+});
+
+it('counts a whole person week across their lines, not each line alone', function (): void {
+    ['manager' => $manager, 'engagement' => $engagement, 'developer' => $developer, 'lead' => $lead] = burnSetup();
+
+    /* Five developer days plus five lead days is ten days out of seven. */
+    $this->actingAs($manager)
+        ->post(route('engagements.burn.store', $engagement), [
+            'week_start' => lastWeek()->toDateString(),
+            'lines' => [
+                ['rate_card_role_id' => $developer->id, 'days' => '5', 'person_name' => 'Sara Peeters'],
+                ['rate_card_role_id' => $lead->id, 'days' => '5', 'person_name' => 'sara peeters '],
+            ],
+        ])
+        ->assertSessionHasErrors('lines.1.days');
+
+    expect(BurnWeek::query()->count())->toBe(0);
+
+    /* The model refuses it too, so no caller can route around the form. */
+    expect(fn () => $engagement->recordBurnWeek(lastWeek(), [
+        ['rate_card_role_id' => $developer->id, 'days' => 5, 'person_name' => 'Sara Peeters'],
+        ['rate_card_role_id' => $lead->id, 'days' => 5, 'person_name' => 'SARA PEETERS'],
+    ], $manager))->toThrow(ValidationException::class, 'A week holds seven days');
+
+    /* Split across profiles but within the week, it records. */
+    $week = $engagement->recordBurnWeek(lastWeek(), [
+        ['rate_card_role_id' => $developer->id, 'days' => 4, 'person_name' => 'Sara Peeters'],
+        ['rate_card_role_id' => $lead->id, 'days' => 3, 'person_name' => 'Sara Peeters'],
+    ], $manager);
+
+    expect($week->days())->toEqual(7.0);
+});
+
+it('treats one person as one person however their name is typed', function (): void {
+    ['manager' => $manager, 'engagement' => $engagement, 'developer' => $developer] = burnSetup();
+
+    expect(fn () => $engagement->recordBurnWeek(lastWeek(), [
+        ['rate_card_role_id' => $developer->id, 'days' => 2, 'person_name' => 'Sara Peeters'],
+        ['rate_card_role_id' => $developer->id, 'days' => 3, 'person_name' => ' sara peeters'],
+    ], $manager))->toThrow(ValidationException::class, 'already have a line this week');
+});
+
+it('drops a colleague reference the name no longer belongs to', function (): void {
+    ['manager' => $manager, 'engagement' => $engagement, 'developer' => $developer] = burnSetup();
+
+    $sara = User::factory()->for($engagement->organization)->create(['name' => 'Sara Peeters']);
+
+    $week = $engagement->recordBurnWeek(lastWeek(), [
+        ['rate_card_role_id' => $developer->id, 'days' => 2, 'person_name' => 'Sara Peeters', 'user_id' => $sara->id],
+        /* The prefilled row was renamed but kept Sara's id. */
+        ['rate_card_role_id' => $developer->id, 'days' => 3, 'person_name' => 'Bram De Wit', 'user_id' => $sara->id],
+    ], $manager);
+
+    $entries = $week->entries->keyBy('person_name');
+
+    expect($entries['Sara Peeters']->user_id)->toBe($sara->id)
+        ->and($entries['Bram De Wit']->user_id)->toBeNull()
+        ->and($entries['Bram De Wit']->person_name)->toBe('Bram De Wit');
 });
 
 it('refuses to edit or delete a recorded week', function (): void {
@@ -226,6 +326,31 @@ it('remembers the profile a person was last recorded against', function (): void
         );
 });
 
+it('prefills the profile a person moved to, not the one they left', function (): void {
+    ['manager' => $manager, 'engagement' => $engagement, 'developer' => $developer, 'lead' => $lead] = burnSetup();
+
+    $engagement->recordBurnWeek(lastWeek()->subWeeks(2), [
+        ['rate_card_role_id' => $developer->id, 'days' => 5, 'person_name' => 'Sara Peeters'],
+    ], $manager);
+
+    /* Sara moved to the lead profile the week after. */
+    $engagement->recordBurnWeek(lastWeek()->subWeek(), [
+        ['rate_card_role_id' => $lead->id, 'days' => 5, 'person_name' => 'Sara Peeters'],
+    ], $manager);
+
+    $sara = User::factory()->for($engagement->organization)->create(['name' => 'Sara Peeters']);
+    WorkItem::factory()->for($engagement->organization)->for($engagement)->create()
+        ->addManualWorklog(16, lastWeek()->addDay()->toDateString(), $sara);
+
+    $this->actingAs($manager)
+        ->get(route('engagements.burn.index', ['engagement' => $engagement, 'week' => lastWeek()->toDateString()]))
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('week.lines.0.personName', 'Sara Peeters')
+            ->where('week.lines.0.roleId', $lead->id)
+            ->where('week.lines.0.roleName', 'Delivery lead')
+        );
+});
+
 it('reads a recorded week back from the ledger instead of re-suggesting it', function (): void {
     ['manager' => $manager, 'engagement' => $engagement, 'developer' => $developer] = burnSetup();
 
@@ -251,6 +376,7 @@ it('records a week through the form and reports where it lands', function (): vo
         ->post(route('engagements.burn.store', $engagement), [
             'week_start' => lastWeek()->toDateString(),
             'lines' => [
+                /* Both lines claim a provenance neither figure has. */
                 ['rate_card_role_id' => $developer->id, 'days' => '4.5', 'person_name' => 'Sara Peeters', 'source' => 'worklog'],
                 ['rate_card_role_id' => $lead->id, 'days' => '1', 'person_name' => null, 'source' => 'progress'],
             ],
@@ -261,6 +387,8 @@ it('records a week through the form and reports where it lands', function (): vo
 
     expect($week->cost->amount)->toBe(202500 + 60000)
         ->and($week->entries)->toHaveCount(2)
+        /* Nothing was logged and no estimate matches, so both record as typed. */
+        ->and($week->entries->pluck('source')->unique()->all())->toBe([BurnSource::Manual])
         ->and($engagement->recordedBurn()->format())->toBe('€ 2.625,00');
 });
 
@@ -271,7 +399,7 @@ it('refuses more than seven days for one person but not for a whole profile', fu
         ->post(route('engagements.burn.store', $engagement), [
             'week_start' => lastWeek()->toDateString(),
             'lines' => [
-                ['rate_card_role_id' => $developer->id, 'days' => '9', 'person_name' => 'Sara Peeters', 'source' => 'manual'],
+                ['rate_card_role_id' => $developer->id, 'days' => '9', 'person_name' => 'Sara Peeters'],
             ],
         ])
         ->assertSessionHasErrors('lines.0.days');
@@ -280,7 +408,7 @@ it('refuses more than seven days for one person but not for a whole profile', fu
         ->post(route('engagements.burn.store', $engagement), [
             'week_start' => lastWeek()->toDateString(),
             'lines' => [
-                ['rate_card_role_id' => $developer->id, 'days' => '9', 'source' => 'manual'],
+                ['rate_card_role_id' => $developer->id, 'days' => '9'],
             ],
         ])
         ->assertSessionHasNoErrors();
@@ -300,7 +428,7 @@ it('keeps burn behind the roles that may read the rate card', function (): void 
     $this->actingAs($member)
         ->post(route('engagements.burn.store', $engagement), [
             'week_start' => lastWeek()->toDateString(),
-            'lines' => [['rate_card_role_id' => $developer->id, 'days' => '2', 'source' => 'manual']],
+            'lines' => [['rate_card_role_id' => $developer->id, 'days' => '2']],
         ])
         ->assertForbidden();
 
@@ -317,7 +445,7 @@ it('refuses to record burn on an archived engagement', function (): void {
     $this->actingAs($manager)
         ->post(route('engagements.burn.store', $engagement), [
             'week_start' => lastWeek()->toDateString(),
-            'lines' => [['rate_card_role_id' => $developer->id, 'days' => '2', 'source' => 'manual']],
+            'lines' => [['rate_card_role_id' => $developer->id, 'days' => '2']],
         ])
         ->assertForbidden();
 });
