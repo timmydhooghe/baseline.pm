@@ -31,6 +31,14 @@ return Application::configure(basePath: dirname(__DIR__))
          * bound tenant models would resolve unscoped on the first request.
          */
         $middleware->prependToPriorityList(SubstituteBindings::class, SetCurrentOrganization::class);
+
+        /*
+         * Guests bounced off the portal belong on the portal's own sign-in
+         * screen, not the internal login.
+         */
+        $middleware->redirectGuestsTo(fn (Request $request): string => $request->routeIs('portal.*')
+            ? route('portal.welcome')
+            : route('login'));
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

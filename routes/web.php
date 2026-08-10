@@ -29,11 +29,15 @@ use App\Http\Controllers\MarginController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\MilestoneAcceptancePackController;
 use App\Http\Controllers\OrganizationController;
+use App\Http\Controllers\PortalBaselineController;
 use App\Http\Controllers\PortalChangeRequestController;
 use App\Http\Controllers\PortalDecisionController;
 use App\Http\Controllers\PortalDeliverableController;
+use App\Http\Controllers\PortalEngagementController;
 use App\Http\Controllers\PortalFinalAcceptanceController;
+use App\Http\Controllers\PortalHomeController;
 use App\Http\Controllers\PortalReportController;
+use App\Http\Controllers\PortalSessionController;
 use App\Http\Controllers\RateCardController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RiskController;
@@ -168,16 +172,33 @@ Route::middleware('guest')->group(function (): void {
 });
 
 /*
- * Stakeholder portal. Change request, deliverable and final acceptance
- * reviews run on personally signed links from the approver notifications —
- * the signature covers the stakeholder parameter, so identity cannot be
- * swapped. The full portal (stakeholder guard, shared records) lands with
- * FA-27.
+ * Stakeholder portal (FA-27). Browsing — the engagement hub with its shared
+ * records — runs on the `stakeholder` guard, established by an emailed magic
+ * link; stakeholders have no password. Record reviews (baselines, change
+ * requests, deliverables, final acceptance, decisions, reports) run on
+ * personally signed links from the notifications — the signature covers the
+ * stakeholder and snapshot parameters, so neither can be swapped.
  */
 Route::prefix('portal')->name('portal.')->group(function (): void {
-    Route::inertia('/', 'portal/welcome')->name('welcome');
+    Route::get('/', [PortalSessionController::class, 'create'])->name('welcome');
+    Route::post('login', [PortalSessionController::class, 'store'])
+        ->middleware('throttle:6,1')
+        ->name('login.request');
+    Route::get('login/{stakeholder}', [PortalSessionController::class, 'consume'])
+        ->middleware(['signed', 'throttle:10,1'])
+        ->name('login.consume');
+
+    Route::middleware('auth:stakeholder')->group(function (): void {
+        Route::post('logout', [PortalSessionController::class, 'destroy'])->name('logout');
+        Route::get('home', [PortalHomeController::class, 'show'])->name('home');
+        Route::get('engagements/{engagement}', [PortalEngagementController::class, 'show'])->name('engagements.show');
+    });
 
     Route::middleware('signed')->group(function (): void {
+        Route::get('baselines/{baseline}/review/{stakeholder}', [PortalBaselineController::class, 'show'])->name('baselines.show');
+        Route::post('baselines/{baseline}/review/{stakeholder}', [PortalBaselineController::class, 'store'])
+            ->middleware('throttle:10,1')
+            ->name('baselines.respond');
         Route::get('change-requests/{changeRequest}/review/{stakeholder}', [PortalChangeRequestController::class, 'show'])->name('change-requests.show');
         Route::post('change-requests/{changeRequest}/review/{stakeholder}', [PortalChangeRequestController::class, 'store'])
             ->middleware('throttle:10,1')

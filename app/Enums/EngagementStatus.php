@@ -58,4 +58,27 @@ enum EngagementStatus: string
     {
         return $this !== self::Archived;
     }
+
+    /**
+     * Whether the engagement has reached the customer's portal (FA-27):
+     * nothing is shared before the first baseline submission asks for their
+     * approval, and completed work stays visible as read-only history.
+     */
+    public function isPortalVisible(): bool
+    {
+        return ! in_array($this, [self::Draft, self::PreparingBaseline], true);
+    }
+
+    /**
+     * The states the portal may show, for whereIn constraints.
+     *
+     * @return list<self>
+     */
+    public static function portalVisible(): array
+    {
+        return array_values(array_filter(
+            self::cases(),
+            fn (self $status): bool => $status->isPortalVisible(),
+        ));
+    }
 }

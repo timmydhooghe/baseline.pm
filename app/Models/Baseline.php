@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\BaselineDecision;
 use App\Enums\BaselineItemType;
 use App\Enums\BaselineStatus;
 use App\Enums\CommercialModel;
@@ -9,6 +10,7 @@ use App\Enums\EngagementStatus;
 use App\Enums\ExecutionMode;
 use App\Models\Concerns\BelongsToOrganization;
 use App\Models\Concerns\RecordsAuditLog;
+use App\Notifications\BaselineSubmitted;
 use App\ValueObjects\Money;
 use Carbon\CarbonImmutable;
 use Closure;
@@ -63,6 +65,7 @@ use LogicException;
  * @property-read Collection<int, BaselineItem> $items
  * @property-read Collection<int, BaselineAllocation> $allocations
  * @property-read Collection<int, BaselineDocument> $documents
+ * @property-read Collection<int, BaselineResponse> $responses
  */
 #[Fillable(['version', 'commercial_model', 'contract_value', 'start_date', 'end_date', 'execution_mode', 'created_by'])]
 class Baseline extends Model
@@ -203,6 +206,10 @@ class Baseline extends Model
                 $this->engagement->transitionTo(EngagementStatus::AwaitingBaselineApproval);
             }
         });
+
+        foreach ($this->approvers() as $approver) {
+            $approver->notify(new BaselineSubmitted($this));
+        }
     }
 
     /**
@@ -265,6 +272,71 @@ class Baseline extends Model
                 $this->engagement->transitionTo(EngagementStatus::PreparingBaseline);
             }
         });
+    }
+
+    /**
+     * Record the customer's decision on the frozen submission (FA-27). The
+     * response is stored immutably against the customer snapshot it was made
+     * on. Approval commits the baseline and activates the engagement;
+     * rejection and clarification requests both return the draft to the
+     * builder — the snapshots stay on record either way.
+     */
+    public function recordResponse(Stakeholder $stakeholder, BaselineDecision $decision, ?string $comment = null): BaselineResponse
+    {
+        if (! $stakeholder->role->canApprove()) {
+            throw ValidationException::withMessages([
+                'decision' => __('Only stakeholders with approval rights can respond to a baseline.'),
+            ]);
+        }
+
+        return DB::transaction(function () use ($stakeholder, $decision, $comment): BaselineResponse {
+            self::query()->whereKey($this->id)->lockForUpdate()->first();
+
+            $this->unsetRelations();
+            $this->refresh();
+
+            if ($stakeholder->customer_id !== $this->engagement->customer_id) {
+                throw new LogicException('This stakeholder does not belong to the engagement customer.');
+            }
+
+            if ($this->status !== BaselineStatus::AwaitingApproval || $this->customer_snapshot_id === null) {
+                throw ValidationException::withMessages([
+                    'decision' => __('This baseline is no longer awaiting a decision.'),
+                ]);
+            }
+
+            $response = new BaselineResponse([
+                'snapshot_id' => $this->customer_snapshot_id,
+                'stakeholder_id' => $stakeholder->id,
+                'stakeholder_name' => $stakeholder->name,
+                'decision' => $decision,
+                'comment' => $comment,
+            ]);
+            $response->organization_id = $this->organization_id;
+            $response->baseline_id = $this->id;
+            $response->save();
+
+            match ($decision) {
+                BaselineDecision::Approved => $this->approve($stakeholder, $comment),
+                BaselineDecision::Rejected => $this->returnToDraft('rejected', $stakeholder, $comment),
+                BaselineDecision::ClarificationRequested => $this->returnToDraft('clarification_requested', $stakeholder, $comment),
+            };
+
+            return $response;
+        });
+    }
+
+    /**
+     * The stakeholders who may decide on this baseline: the engagement
+     * customer's contacts with approval rights.
+     *
+     * @return Collection<int, Stakeholder>
+     */
+    public function approvers(): Collection
+    {
+        return $this->engagement->customer->stakeholders
+            ->filter(fn (Stakeholder $stakeholder): bool => $stakeholder->role->canApprove())
+            ->values();
     }
 
     /**
@@ -658,6 +730,14 @@ class Baseline extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(BaselineDocument::class);
+    }
+
+    /**
+     * @return HasMany<BaselineResponse, $this>
+     */
+    public function responses(): HasMany
+    {
+        return $this->hasMany(BaselineResponse::class)->latest('created_at');
     }
 
     /**

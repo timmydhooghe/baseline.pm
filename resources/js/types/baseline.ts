@@ -2,6 +2,58 @@ import type { Money, SelectOption } from '@/types';
 
 export type BaselineStatus = 'draft' | 'awaiting_approval' | 'approved';
 
+export type BaselineDecision =
+    'approved' | 'rejected' | 'clarification_requested';
+
+export type BaselineResponseView = {
+    id: string;
+    decision: BaselineDecision;
+    decisionLabel: string;
+    stakeholderName: string;
+    comment: string | null;
+    respondedAt: string;
+};
+
+/**
+ * The frozen customer-visible snapshot of a submitted baseline (FA-5 step 6,
+ * FA-27): the commitments as the customer approves them — cost, rates and
+ * margin are never present.
+ */
+export type BaselineReviewPayload = {
+    kind: string;
+    baseline: {
+        id: string;
+        version: number;
+        commercial_model: string;
+        contract_value: Money;
+        start_date: string;
+        end_date: string;
+        execution_mode: string;
+        engagement: { id: string; name: string };
+        customer: { id: string; name: string };
+    };
+    documents: {
+        id: string;
+        filename: string;
+        mime_type: string;
+        size_bytes: number;
+    }[];
+    items: {
+        id: string;
+        type: BaselineItemType;
+        position: number;
+        title: string;
+        description: string | null;
+        clause_reference: string;
+        owner: { id: string; name: string } | null;
+        value: Money | null;
+        acceptance_criteria:
+            { criterion: string; verification_method: string | null }[] | null;
+        baseline_date: string | null;
+        payment_trigger: string | null;
+    }[];
+};
+
 export type BaselineItemType =
     'deliverable' | 'milestone' | 'assumption' | 'exclusion' | 'responsibility';
 

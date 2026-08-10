@@ -32,5 +32,5 @@ test('guests are redirected away from the app shell', function () {
 test('the stakeholder portal landing is publicly reachable', function () {
     $this->get(route('portal.welcome'))
         ->assertSuccessful()
-        ->assertInertia(fn (Assert $page) => $page->component('portal/welcome'));
+        ->assertInertia(fn (Assert $page) => $page->component('portal/login'));
 });
