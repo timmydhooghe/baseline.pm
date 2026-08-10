@@ -31,10 +31,12 @@ import {
 } from '@/routes/engagements';
 import { show as auditShow } from '@/routes/engagements/audit';
 import { show as baselineShow } from '@/routes/engagements/baseline';
+import { index as burnIndex } from '@/routes/engagements/burn';
 import { index as changeRequestsIndex } from '@/routes/engagements/change-requests';
 import { index as decisionsIndex } from '@/routes/engagements/decisions';
 import { index as deliverablesIndex } from '@/routes/engagements/deliverables';
 import { index as dependenciesIndex } from '@/routes/engagements/dependencies';
+import { show as marginShow } from '@/routes/engagements/margin';
 import { index as risksIndex } from '@/routes/engagements/risks';
 import { show as workShow } from '@/routes/engagements/work';
 import type {
@@ -460,6 +462,79 @@ export default function EngagementsShow({
                         </div>
                     )}
                 </div>
+
+                {position.burn !== null && (
+                    <div
+                        className="border-[1.5px] border-ink dark:border-paper"
+                        data-test="money-card"
+                    >
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b-[1.5px] border-ink px-4 py-3 dark:border-paper">
+                            <span className="font-plex-mono text-[11px] font-semibold tracking-[0.08em] text-stone uppercase dark:text-fog">
+                                Money
+                            </span>
+                            <span className="font-plex-mono text-[11px] font-semibold uppercase">
+                                {position.burn.weeks} week
+                                {position.burn.weeks === 1 ? '' : 's'} recorded
+                                {position.burn.budgetPercent !== null &&
+                                    ` · ${position.burn.budgetPercent}% of budget`}
+                            </span>
+                        </div>
+                        <div className="grid divide-ink/15 sm:grid-cols-2 sm:divide-x dark:divide-paper/15">
+                            <Link
+                                href={burnIndex(engagement.id)}
+                                prefetch
+                                data-test="open-burn"
+                                className="flex flex-col gap-1 px-4 py-3 transition-colors hover:bg-ink/5 dark:hover:bg-paper/5"
+                            >
+                                <span className="font-plex-mono text-[11px] font-semibold text-stone uppercase dark:text-fog">
+                                    Weekly burn
+                                </span>
+                                <span className="font-plex-mono text-[18px] font-semibold">
+                                    {position.burn.recorded.formatted} burned
+                                </span>
+                                <span
+                                    className={cn(
+                                        'text-[12px]',
+                                        position.burn.unrecordedWeeks > 0
+                                            ? 'font-semibold text-rust'
+                                            : 'text-stone dark:text-fog',
+                                    )}
+                                >
+                                    {position.burn.unrecordedWeeks > 0
+                                        ? `${position.burn.unrecordedWeeks} week${position.burn.unrecordedWeeks === 1 ? '' : 's'} still unrecorded`
+                                        : 'Every finished week is on the ledger.'}
+                                </span>
+                            </Link>
+                            <Link
+                                href={marginShow(engagement.id)}
+                                prefetch
+                                data-test="open-margin"
+                                className="flex flex-col gap-1 px-4 py-3 transition-colors hover:bg-ink/5 dark:hover:bg-paper/5"
+                            >
+                                <span className="font-plex-mono text-[11px] font-semibold text-stone uppercase dark:text-fog">
+                                    Margin forecast
+                                </span>
+                                <span className="font-plex-mono text-[18px] font-semibold">
+                                    {position.margin?.forecast.formatted ??
+                                        '€ —'}
+                                </span>
+                                <span
+                                    className={cn(
+                                        'text-[12px]',
+                                        (position.margin?.variance.amount ??
+                                            0) > 0
+                                            ? 'font-semibold text-rust'
+                                            : 'text-stone dark:text-fog',
+                                    )}
+                                >
+                                    {position.margin === null
+                                        ? 'Approve a baseline to forecast against.'
+                                        : `${position.margin.percent ?? '—'}% against ${position.margin.plannedPercent ?? '—'}% planned`}
+                                </span>
+                            </Link>
+                        </div>
+                    </div>
+                )}
 
                 <div
                     className="border-[1.5px] border-ink dark:border-paper"

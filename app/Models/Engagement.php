@@ -3,7 +3,10 @@
 namespace App\Models;
 
 use App\Actions\Governance\ProposeDecisionsFromTranscript;
+use App\Actions\Money\MarginForecast;
 use App\Enums\BaselineStatus;
+use App\Enums\BurnSource;
+use App\Enums\ChangeRequestStatus;
 use App\Enums\DeliverableStatus;
 use App\Enums\DependencyParty;
 use App\Enums\DependencyStatus;
@@ -28,6 +31,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use LogicException;
@@ -56,6 +60,7 @@ use LogicException;
  * @property-read Collection<int, Decision> $decisions
  * @property-read Collection<int, Risk> $risks
  * @property-read Collection<int, Dependency> $dependencies
+ * @property-read Collection<int, BurnWeek> $burnWeeks
  */
 #[Fillable(['name'])]
 class Engagement extends Model
@@ -71,6 +76,16 @@ class Engagement extends Model
     protected $attributes = [
         'status' => 'draft',
     ];
+
+    /**
+     * The memoized margin forecast for this request, and whether the memo
+     * carries the "why it moved" attribution.
+     *
+     * @var array<string, mixed>|null
+     */
+    protected ?array $forecast = null;
+
+    protected bool $forecastCarriesAttribution = false;
 
     protected static function booted(): void
     {
@@ -499,6 +514,235 @@ class Engagement extends Model
     }
 
     /**
+     * Record a week of burn (FA-16): days per person or profile, priced at
+     * the pinned rate card. Recording freezes the week — the rows never
+     * change again — and recording a week that is already on record files a
+     * correction: the new entry becomes current and the earlier one is
+     * marked superseded rather than rewritten.
+     *
+     * Serialized under a row lock: two managers recording the same week
+     * would otherwise each find no current entry, both write one, and leave
+     * cost-to-date double counting a week nobody worked twice.
+     *
+     * @param  list<array{rate_card_role_id: string, days: float|string, person_name?: string|null, user_id?: string|null, source?: BurnSource|string|null}>  $lines
+     */
+    public function recordBurnWeek(DateTimeInterface|string $week, array $lines, ?User $actor = null, ?string $note = null): BurnWeek
+    {
+        $this->guardWritable(__('Archived engagements are read-only.'), 'week_start');
+
+        $weekStart = BurnWeek::startOfWeekFor($week);
+
+        if ($weekStart->isFuture()) {
+            throw ValidationException::withMessages([
+                'week_start' => __('A week can only be recorded once it has started.'),
+            ]);
+        }
+
+        if ($lines === []) {
+            throw ValidationException::withMessages([
+                'lines' => __('A recorded week needs at least one line — an empty week is not the same as a week nobody worked.'),
+            ]);
+        }
+
+        /*
+         * Every euro traces to a published rate card (FA-2). The approved
+         * baseline's pin is the one cost budget and margin are read against;
+         * before approval the organization's current version stands in, so a
+         * mobilisation week is not lost for want of a signature.
+         */
+        $pinned = $this->approvedBaseline()?->rateCardVersion;
+        $version = $pinned ?? $this->organization->currentRateCardVersion();
+
+        if ($version === null) {
+            throw ValidationException::withMessages([
+                'lines' => __('Publish a rate card before recording burn — cost derives from role rates, never from a typed amount.'),
+            ]);
+        }
+
+        /*
+         * Priced before anything is written: the week's frozen total has to
+         * be right the first time, because the row it lands on can never be
+         * updated again.
+         */
+        $priced = $this->priceBurnLines($lines, $version->roles->keyBy('id'));
+        $total = array_reduce(
+            $priced,
+            fn (Money $sum, array $line): Money => $sum->add($line['cost']),
+            Money::zero(),
+        );
+
+        return DB::transaction(function () use ($weekStart, $priced, $total, $actor, $note, $version): BurnWeek {
+            self::query()->whereKey($this->id)->lockForUpdate()->first();
+
+            $superseded = $this->burnWeeks()
+                ->whereNull('superseded_at')
+                ->whereDate('week_start', $weekStart->toDateString())
+                ->first();
+
+            $burnWeek = new BurnWeek([
+                'week_start' => $weekStart,
+                'note' => $note,
+                'recorded_at' => now(),
+                'recorded_by' => $actor?->id,
+            ]);
+            $burnWeek->organization_id = $this->organization_id;
+            $burnWeek->engagement_id = $this->id;
+            $burnWeek->rate_card_version_id = $version->id;
+            $burnWeek->cost = $total;
+            $burnWeek->save();
+
+            foreach ($priced as $line) {
+                $burnWeek->entries()->create([...$line, 'organization_id' => $this->organization_id]);
+            }
+
+            if ($superseded !== null) {
+                $superseded->superseded_at = now();
+                $superseded->superseded_by_id = $burnWeek->id;
+                $superseded->save();
+            }
+
+            AuditLog::record($superseded === null ? 'burn_week.recorded' : 'burn_week.corrected', $burnWeek, [
+                'week_start' => $weekStart->toDateString(),
+                'lines' => count($priced),
+                'days' => array_sum(array_column($priced, 'days')),
+                'cost' => $total->format(),
+                'rate_card_version' => $version->version,
+                'corrects' => $superseded?->id,
+                'previous_cost' => $superseded?->cost->format(),
+                'note' => $note,
+                'recorded_by' => $actor?->name,
+            ]);
+
+            /*
+             * The week that just landed moved cost to date, so every derived
+             * figure memoized before it is now a stale reading of the ledger.
+             */
+            $this->forecast = null;
+
+            return $burnWeek->load('entries.role');
+        });
+    }
+
+    /**
+     * Turn the submitted lines into priced burn entries, refusing anything
+     * that would put a figure on the ledger nobody can trace: a role from
+     * another rate card version, days that were not spent, or the same
+     * person booked twice in one week.
+     *
+     * @param  list<array{rate_card_role_id: string, days: float|string, person_name?: string|null, user_id?: string|null, source?: BurnSource|string|null}>  $lines
+     * @param  SupportCollection<string, RateCardRole>  $roles
+     * @return list<array<string, mixed>>
+     */
+    protected function priceBurnLines(array $lines, SupportCollection $roles): array
+    {
+        $priced = [];
+        $seen = [];
+
+        foreach ($lines as $index => $line) {
+            $role = $roles->get($line['rate_card_role_id']);
+
+            if (! $role instanceof RateCardRole) {
+                throw ValidationException::withMessages([
+                    "lines.{$index}.rate_card_role_id" => __('Pick a role from the rate card version this engagement is priced against.'),
+                ]);
+            }
+
+            $days = round((float) $line['days'], 2);
+
+            if ($days <= 0) {
+                throw ValidationException::withMessages([
+                    "lines.{$index}.days" => __('A burn line records days actually spent — leave the line out instead.'),
+                ]);
+            }
+
+            $person = $line['person_name'] ?? null;
+            $key = $role->id.'|'.($person ?? '');
+
+            if (isset($seen[$key])) {
+                throw ValidationException::withMessages([
+                    "lines.{$index}.rate_card_role_id" => __('This person and profile already have a line this week — record their days once.'),
+                ]);
+            }
+
+            $seen[$key] = true;
+
+            $priced[] = [
+                'rate_card_role_id' => $role->id,
+                'role_name' => $role->name,
+                'user_id' => $line['user_id'] ?? null,
+                'person_name' => $person,
+                'days' => $days,
+                'source' => $line['source'] ?? BurnSource::Manual,
+                'cost_per_day' => $role->cost_per_day,
+                'cost' => Money::fromCents((int) round($days * $role->cost_per_day->amount)),
+            ];
+        }
+
+        return $priced;
+    }
+
+    /**
+     * The burn weeks the money reads: the current recording of each week,
+     * newest first. Superseded entries stay on the ledger as the trail of
+     * what was corrected.
+     *
+     * @return HasMany<BurnWeek, $this>
+     */
+    public function currentBurnWeeks(): HasMany
+    {
+        return $this->burnWeeks()->whereNull('superseded_at');
+    }
+
+    /**
+     * Cost-to-date (FA-15): every recorded week's frozen cost. This is the
+     * "recorded burn" half of forecast-at-completion.
+     */
+    public function recordedBurn(): Money
+    {
+        return Money::fromCents((int) $this->currentBurnWeeks()->sum('cost_cents'));
+    }
+
+    /**
+     * The weeks of the engagement that have finished without anybody
+     * recording them (FA-16) — the queue Today puts in front of the delivery
+     * manager. The current week is not late until it is over, and a
+     * completed or archived engagement has stopped burning.
+     *
+     * @return list<CarbonImmutable>
+     */
+    public function unrecordedBurnWeeks(?DateTimeInterface $asOf = null): array
+    {
+        $baseline = $this->approvedBaseline();
+
+        if ($baseline === null || in_array($this->status, [EngagementStatus::Completed, EngagementStatus::Archived], true)) {
+            return [];
+        }
+
+        $from = BurnWeek::startOfWeekFor($baseline->start_date);
+        $until = BurnWeek::startOfWeekFor($asOf ?? now())->subWeek();
+        $planned = BurnWeek::startOfWeekFor($baseline->end_date);
+
+        if ($planned->lessThan($until)) {
+            $until = $planned;
+        }
+
+        $recorded = $this->currentBurnWeeks()
+            ->pluck('week_start')
+            ->map(fn (mixed $date): string => BurnWeek::startOfWeekFor($date)->toDateString())
+            ->all();
+
+        $missing = [];
+
+        for ($week = $from; ! $week->greaterThan($until); $week = $week->addWeek()) {
+            if (! in_array($week->toDateString(), $recorded, true)) {
+                $missing[] = $week;
+            }
+        }
+
+        return $missing;
+    }
+
+    /**
      * The risks that belong in front of somebody today (FA-19, FA-25): live
      * high-probability, high-impact entries, plus any live risk whose last
      * re-rating made it worse. Ordered worst first.
@@ -675,17 +919,68 @@ class Engagement extends Model
     }
 
     /**
-     * The position rail summary (FA-10, FA-23): what is contracted, what the
-     * customer has signed off, and what the unresolved scope creep would be worth,
-     * always visible beside the engagement's pages. The waterfall's remaining
-     * lines — burned, pending CRs — arrive with their own features (FA-14,
-     * FA-16).
+     * The change requests still in flight (FA-14): everything raised that the
+     * customer has neither approved nor rejected. A request without a price
+     * yet is counted rather than guessed at — the queue is real even before
+     * the number is.
      *
-     * The unbilled-risk price derives from sell rates, so it follows the
-     * rate card policy: callers pass whether the viewer may read commercial
-     * figures, and for everyone else the price is structurally absent while
-     * the queue size stays visible. The contracted value is not stripped —
-     * members already see it on the baseline page.
+     * @return array{count: int, unpriced: int, price: Money}
+     */
+    public function pendingChangeValue(): array
+    {
+        $pending = $this->changeRequests()
+            ->whereNotIn('status', [ChangeRequestStatus::Approved, ChangeRequestStatus::Rejected])
+            ->get();
+
+        $prices = $pending
+            ->map(fn (ChangeRequest $changeRequest): ?Money => $changeRequest->customer_price)
+            ->filter();
+
+        return [
+            'count' => $pending->count(),
+            'unpriced' => $pending->count() - $prices->count(),
+            'price' => $prices->reduce(
+                fn (Money $sum, Money $price): Money => $sum->add($price),
+                Money::zero(),
+            ),
+        ];
+    }
+
+    /**
+     * The derived margin forecast (FA-15), memoized for the request. The rail
+     * appears beside every page and the money pages read the same derivation
+     * again for their own detail — deriving it twice would mean querying the
+     * plan, the recorded weeks and the registers twice to reach identical
+     * numbers. The memo only ever serves a derivation at least as complete as
+     * the one being asked for.
+     *
+     * @return array<string, mixed>
+     */
+    public function marginForecast(bool $withAttribution = true): array
+    {
+        if ($this->forecast !== null && (! $withAttribution || $this->forecastCarriesAttribution)) {
+            return $this->forecast;
+        }
+
+        $this->forecastCarriesAttribution = $withAttribution;
+
+        return $this->forecast = app(MarginForecast::class)($this, $withAttribution);
+    }
+
+    /**
+     * The position rail (FA-14): the live commercial waterfall this
+     * engagement is standing on — APPROVED (baseline vN), ACCEPTED (signed),
+     * PENDING CR (in flight), UNBILLED RISK (unresolved scope creep) — plus
+     * the burn recorded against it and the margin forecast and budget % those
+     * derive (FA-15). Every figure carries what it derives from, so the rail
+     * can click through to its source rather than assert.
+     *
+     * Cost, burn and margin are internal (FA-27), and so is the sell-rate
+     * derived unbilled-risk price: callers pass whether the viewer may read
+     * commercial figures, and for everyone else those blocks are structurally
+     * absent while the queue sizes stay visible. Approved, accepted and
+     * pending-CR values are contract figures members already read on the
+     * baseline and change control pages, so they are not stripped.
      *
      * @return array<string, mixed>
      */
@@ -693,6 +988,8 @@ class Engagement extends Model
     {
         $approved = $this->approvedBaseline();
         $risk = $this->unbilledRisk();
+        $change = $this->pendingChangeValue();
+        $forecast = $withCommercials ? $this->marginForecast(withAttribution: false) : null;
 
         return [
             'engagementId' => $this->id,
@@ -703,10 +1000,33 @@ class Engagement extends Model
                 'total' => $this->deliverables()->count(),
                 'value' => $this->acceptedValue()->toArray(),
             ],
+            'pendingChange' => [
+                'count' => $change['count'],
+                'unpriced' => $change['unpriced'],
+                'price' => $change['price']->toArray(),
+            ],
             'unbilledRisk' => [
                 'count' => $risk['count'],
                 'unpriced' => $risk['unpriced'],
                 'price' => $withCommercials ? $risk['price']->toArray() : null,
+            ],
+            'burn' => $forecast === null ? null : [
+                'recorded' => $forecast['recordedBurn']->toArray(),
+                'costBudget' => $forecast['costBudget']?->toArray(),
+                'budgetPercent' => $forecast['budgetPercent'],
+                'forecastPercent' => $forecast['forecastPercent'],
+                'weeks' => $forecast['weekCount'],
+                'unrecordedWeeks' => $forecast['unrecordedWeeks'],
+            ],
+            'margin' => $forecast === null || ! $forecast['hasBaseline'] ? null : [
+                'forecast' => $forecast['margin']->toArray(),
+                'percent' => $forecast['marginPercent'],
+                'planned' => $forecast['plannedMargin']->toArray(),
+                'plannedPercent' => $forecast['plannedMarginPercent'],
+                'variance' => $forecast['variance']->toArray(),
+                'low' => $forecast['riskBand']['low']->toArray(),
+                'lowPercent' => $forecast['riskBand']['lowPercent'],
+                'weightedExposure' => $forecast['riskBand']['weightedExposure']->toArray(),
             ],
         ];
     }
@@ -798,6 +1118,17 @@ class Engagement extends Model
     public function dependencies(): HasMany
     {
         return $this->hasMany(Dependency::class);
+    }
+
+    /**
+     * Every burn recording ever filed, corrections included — newest week
+     * first. Money reads currentBurnWeeks(); this relation is the ledger.
+     *
+     * @return HasMany<BurnWeek, $this>
+     */
+    public function burnWeeks(): HasMany
+    {
+        return $this->hasMany(BurnWeek::class)->orderByDesc('week_start')->orderByDesc('recorded_at');
     }
 
     /**

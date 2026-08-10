@@ -5,6 +5,7 @@ use App\Http\Controllers\BaselineCommercialController;
 use App\Http\Controllers\BaselineController;
 use App\Http\Controllers\BaselineDocumentController;
 use App\Http\Controllers\BaselineItemController;
+use App\Http\Controllers\BurnController;
 use App\Http\Controllers\ChangeRequestAssessmentController;
 use App\Http\Controllers\ChangeRequestController;
 use App\Http\Controllers\ChangeRequestProposalController;
@@ -24,6 +25,7 @@ use App\Http\Controllers\FinalAcceptanceController;
 use App\Http\Controllers\IntegrationAccountController;
 use App\Http\Controllers\IntegrationConnectionController;
 use App\Http\Controllers\InvitationController;
+use App\Http\Controllers\MarginController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\MilestoneAcceptancePackController;
 use App\Http\Controllers\OrganizationController;
@@ -96,6 +98,10 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::delete('deliverables/{deliverable}/submit', [DeliverableSubmissionController::class, 'destroy'])->name('deliverables.submit.withdraw');
     Route::get('engagements/{engagement}/milestones/{milestone}/acceptance-pack', [MilestoneAcceptancePackController::class, 'show'])->name('engagements.milestones.acceptance-pack');
     Route::post('engagements/{engagement}/final-acceptance', [FinalAcceptanceController::class, 'store'])->name('engagements.final-acceptance.store');
+
+    Route::get('engagements/{engagement}/burn', [BurnController::class, 'index'])->name('engagements.burn.index');
+    Route::post('engagements/{engagement}/burn', [BurnController::class, 'store'])->name('engagements.burn.store');
+    Route::get('engagements/{engagement}/margin', [MarginController::class, 'show'])->name('engagements.margin.show');
 
     Route::get('engagements/{engagement}/decisions', [DecisionController::class, 'index'])->name('engagements.decisions.index');
     Route::post('engagements/{engagement}/decisions', [DecisionController::class, 'store'])->name('engagements.decisions.store');
