@@ -51,7 +51,13 @@ class PortalChangeRequestController extends Controller
             'stakeholder' => [
                 'name' => $stakeholder->name,
             ],
+            /*
+             * Only the decisions made against the snapshot this page shows:
+             * a superseded link must never display a response — least of all
+             * an approval — that belongs to a later revision's terms.
+             */
             'responses' => $changeRequest->responses
+                ->where('snapshot_id', $snapshot->id)
                 ->map(fn (ChangeRequestResponse $response): array => [
                     'id' => $response->id,
                     'decision' => $response->decision->value,

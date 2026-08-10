@@ -53,7 +53,13 @@ class PortalDeliverableController extends Controller
             'stakeholder' => [
                 'name' => $stakeholder->name,
             ],
+            /*
+             * Only the decisions made against the snapshot this page shows:
+             * a superseded link must never display a response — least of all
+             * a signature — that belongs to a later revision's record.
+             */
             'responses' => $deliverable->responses
+                ->where('snapshot_id', $snapshot->id)
                 ->map(fn (DeliverableResponse $response): array => [
                     'id' => $response->id,
                     'decision' => $response->decision->value,

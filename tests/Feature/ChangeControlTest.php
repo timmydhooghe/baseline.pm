@@ -688,6 +688,30 @@ test('a stale portal link cannot decide on a revised proposal', function () {
     expect($changeRequest->status)->toBe(ChangeRequestStatus::Approved)
         ->and($changeRequest->responses->firstWhere('decision', ChangeRequestDecision::Approved)?->snapshot_id)
         ->toBe($changeRequest->customer_snapshot_id);
+
+    // Each page shows only the decisions made on its own terms: the €4,800
+    // approval never bleeds into the superseded €4,000 page.
+    $this->get(URL::signedRoute('portal.change-requests.show', [
+        'changeRequest' => $changeRequest->id,
+        'stakeholder' => $approver->id,
+        'snapshot' => $staleSnapshotId,
+    ]))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('superseded', true)
+            ->has('responses', 1)
+            ->where('responses.0.decision', 'clarification_requested'));
+
+    $this->get(URL::signedRoute('portal.change-requests.show', [
+        'changeRequest' => $changeRequest->id,
+        'stakeholder' => $approver->id,
+        'snapshot' => $changeRequest->customer_snapshot_id,
+    ]))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('superseded', false)
+            ->has('responses', 1)
+            ->where('responses.0.decision', 'approved'));
 });
 
 test('approval rebases schedule impact when another change advanced the baseline first', function () {

@@ -78,13 +78,16 @@ export default function PortalDeliverable({
                         happens on the latest version in your inbox.
                     </div>
                 )}
-                {deliverable.status === 'accepted' && (
+                {/* A superseded page never claims a decision: the one on
+                    record belongs to a later revision's record, not to the
+                    frozen version shown here. */}
+                {!superseded && deliverable.status === 'accepted' && (
                     <div className="border-[1.5px] border-moss px-4 py-3 font-plex-mono text-[12px] font-semibold text-moss uppercase">
                         Accepted {deliverable.acceptedAt} — signed off as
                         delivered.
                     </div>
                 )}
-                {deliverable.status === 'rejected' && (
+                {!superseded && deliverable.status === 'rejected' && (
                     <div className="border-[1.5px] border-rust px-4 py-3 font-plex-mono text-[12px] font-semibold text-rust uppercase">
                         Rejected {deliverable.decidedAt} — with the delivery
                         team for rework.

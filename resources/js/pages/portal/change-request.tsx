@@ -76,13 +76,16 @@ export default function PortalChangeRequest({
                         happens on the latest version in your inbox.
                     </div>
                 )}
-                {changeRequest.status === 'approved' && (
+                {/* A superseded page never claims a decision: the one on
+                    record belongs to a later revision's terms, not to the
+                    frozen proposal shown here. */}
+                {!superseded && changeRequest.status === 'approved' && (
                     <div className="border-[1.5px] border-moss px-4 py-3 font-plex-mono text-[12px] font-semibold text-moss uppercase">
                         Approved {changeRequest.decidedAt} — the change is part
                         of the agreed baseline.
                     </div>
                 )}
-                {changeRequest.status === 'rejected' && (
+                {!superseded && changeRequest.status === 'rejected' && (
                     <div className="border-[1.5px] border-rust px-4 py-3 font-plex-mono text-[12px] font-semibold text-rust uppercase">
                         Rejected {changeRequest.decidedAt}.
                     </div>

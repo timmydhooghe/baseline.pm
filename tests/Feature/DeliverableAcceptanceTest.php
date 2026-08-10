@@ -932,6 +932,30 @@ test('a stale portal link cannot sign a revised deliverable', function () {
     expect($record->status)->toBe(DeliverableStatus::Accepted)
         ->and($record->responses->firstWhere('decision', AcceptanceDecision::Accepted)?->snapshot_id)
         ->toBe($record->customer_snapshot_id);
+
+    // Each page shows only the decisions made on its own record: the
+    // signature on 95% never bleeds into the superseded 0% page.
+    $this->get(URL::signedRoute('portal.deliverables.show', [
+        'deliverable' => $record->id,
+        'stakeholder' => $approver->id,
+        'snapshot' => $staleSnapshotId,
+    ]))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('superseded', true)
+            ->has('responses', 1)
+            ->where('responses.0.decision', 'clarification_requested'));
+
+    $this->get(URL::signedRoute('portal.deliverables.show', [
+        'deliverable' => $record->id,
+        'stakeholder' => $approver->id,
+        'snapshot' => $record->customer_snapshot_id,
+    ]))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('superseded', false)
+            ->has('responses', 1)
+            ->where('responses.0.decision', 'accepted'));
 });
 
 test('a review link naming a snapshot of another record is refused', function () {
