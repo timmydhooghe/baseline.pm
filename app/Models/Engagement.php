@@ -226,6 +226,10 @@ class Engagement extends Model
      */
     public function currentFinalAcceptance(): ?FinalAcceptance
     {
+        if ($this->relationLoaded('finalAcceptances')) {
+            return $this->finalAcceptances->sortByDesc('created_at')->first();
+        }
+
         return $this->finalAcceptances()->latest('created_at')->first();
     }
 
@@ -297,10 +301,20 @@ class Engagement extends Model
     }
 
     /**
-     * The approved baseline the engagement currently executes against.
+     * The approved baseline the engagement currently executes against. Reads
+     * the loaded relation when a caller eager-loaded it — the portfolio
+     * dashboard asks this once per derived figure, and each answer must not
+     * cost a query of its own.
      */
     public function approvedBaseline(): ?Baseline
     {
+        if ($this->relationLoaded('baselines')) {
+            return $this->baselines
+                ->filter(fn (Baseline $baseline): bool => $baseline->status === BaselineStatus::Approved)
+                ->sortByDesc('version')
+                ->first();
+        }
+
         return $this->baselines()
             ->where('status', BaselineStatus::Approved)
             ->orderByDesc('version')
@@ -786,8 +800,9 @@ class Engagement extends Model
      */
     public function unrecordedBurnWeeks(?DateTimeInterface $asOf = null): array
     {
-        $recorded = $this->currentBurnWeeks()
-            ->pluck('week_start')
+        $recorded = ($this->relationLoaded('burnWeeks')
+            ? $this->burnWeeks->whereNull('superseded_at')->pluck('week_start')
+            : $this->currentBurnWeeks()->pluck('week_start'))
             ->map(fn (mixed $date): string => BurnWeek::startOfWeekFor($date)->toDateString())
             ->all();
 
@@ -806,8 +821,9 @@ class Engagement extends Model
      */
     public function dueReportWeeks(?DateTimeInterface $asOf = null): array
     {
-        $published = $this->reports()
-            ->pluck('week_start')
+        $published = ($this->relationLoaded('reports')
+            ? $this->reports->pluck('week_start')
+            : $this->reports()->pluck('week_start'))
             ->map(fn (mixed $date): string => BurnWeek::startOfWeekFor($date)->toDateString())
             ->all();
 
@@ -875,9 +891,25 @@ class Engagement extends Model
             ]);
         }
 
-        if ($this->approvedBaseline() === null) {
+        $baseline = $this->approvedBaseline();
+
+        if ($baseline === null) {
             throw ValidationException::withMessages([
                 'week_start' => __('Weekly reports read the engagement against its approved baseline — approve one first.'),
+            ]);
+        }
+
+        /*
+         * The reporting window opens with the baseline. A week before it
+         * would freeze — and mail out — a record of a week the engagement
+         * was not being executed. Weeks past the planned end stay
+         * publishable: an overrun is still a week the customer lived.
+         */
+        if ($weekStart->lessThan(BurnWeek::startOfWeekFor($baseline->start_date))) {
+            throw ValidationException::withMessages([
+                'week_start' => __('Reporting starts with the baseline — the week of :week lies before it.', [
+                    'week' => BurnWeek::labelFor($weekStart),
+                ]),
             ]);
         }
 
@@ -898,6 +930,7 @@ class Engagement extends Model
                 'week_start' => $weekStart,
                 'published_at' => now(),
                 'published_by' => $publisher?->id,
+                'published_by_name' => $publisher?->name,
             ]);
             $report->organization_id = $this->organization_id;
             $report->engagement_id = $this->id;
@@ -937,10 +970,14 @@ class Engagement extends Model
      */
     public function escalatedRisks(): Collection
     {
-        return $this->risks()
-            ->whereIn('status', [RiskStatus::Open, RiskStatus::Mitigating])
-            ->with(['revisions', 'exposures.role', 'owner'])
-            ->get()
+        $live = $this->relationLoaded('risks')
+            ? $this->risks->filter(fn (Risk $risk): bool => in_array($risk->status, [RiskStatus::Open, RiskStatus::Mitigating], true))
+            : $this->risks()
+                ->whereIn('status', [RiskStatus::Open, RiskStatus::Mitigating])
+                ->with(['revisions', 'exposures.role', 'owner'])
+                ->get();
+
+        return $live
             ->filter(fn (Risk $risk): bool => $risk->isEscalated() || $risk->isWorsening())
             ->sortByDesc(fn (Risk $risk): int => $risk->score())
             ->values();
@@ -982,6 +1019,14 @@ class Engagement extends Model
      */
     public function customerOwedDependencies(): Collection
     {
+        if ($this->relationLoaded('dependencies')) {
+            return $this->dependencies
+                ->filter(fn (Dependency $dependency): bool => $dependency->party === DependencyParty::Customer
+                    && $dependency->status->isOutstanding())
+                ->sortBy('required_on')
+                ->values();
+        }
+
         return $this->dependencies()
             ->where('party', DependencyParty::Customer)
             ->whereIn('status', [DependencyStatus::Pending, DependencyStatus::Requested, DependencyStatus::Escalated])
@@ -998,6 +1043,13 @@ class Engagement extends Model
      */
     public function lateDependencies(): Collection
     {
+        if ($this->relationLoaded('dependencies')) {
+            return $this->dependencies
+                ->filter(fn (Dependency $dependency): bool => $dependency->isLate())
+                ->sortBy('required_on')
+                ->values();
+        }
+
         return $this->dependencies()
             ->whereIn('status', [DependencyStatus::Pending, DependencyStatus::Requested, DependencyStatus::Escalated])
             ->whereDate('required_on', '<', now()->toDateString())
@@ -1070,7 +1122,17 @@ class Engagement extends Model
     public function unbilledRisk(): array
     {
         $rates = $this->currentBaseline()?->blendedDayRates();
-        $items = $this->scopeCreepWorkItems()->with('worklogs')->get();
+
+        /*
+         * A caller that eager-loaded the work items — the portfolio
+         * dashboard, constrained to the untriaged unmapped ones — is read
+         * in memory; the filter still applies in case the load was wider.
+         */
+        $items = $this->relationLoaded('workItems')
+            ? $this->workItems
+                ->filter(fn (WorkItem $item): bool => $item->triage_status === null && $item->link === null)
+                ->values()
+            : $this->scopeCreepWorkItems()->with('worklogs')->get();
 
         $cost = Money::zero();
         $price = Money::zero();

@@ -130,6 +130,107 @@ it('diffs each deliverable against what the previous published report said', fun
         ->and($payload['moved'][0]['previous']['progress'])->toBe(20);
 });
 
+it('diffs against the last published report when a week was skipped', function (): void {
+    ['manager' => $manager, 'engagement' => $engagement, 'checkout' => $checkout] = reportSetup();
+
+    $deliverable = Deliverable::query()->where('baseline_item_id', $checkout->id)->sole();
+
+    $deliverable->update(['progress' => 20]);
+    $engagement->publishWeeklyReport(lastWeek()->subWeeks(2), $manager);
+
+    /* The week in between is never published; the deltas must survive the gap. */
+    $deliverable->update(['progress' => 45]);
+    $report = $engagement->publishWeeklyReport(lastWeek(), $manager);
+
+    $payload = $report->reviewSnapshot->payload;
+
+    expect($payload['previous']['week_start'])->toBe(lastWeek()->subWeeks(2)->toDateString())
+        ->and($payload['moved'][0]['previous']['progress'])->toBe(20);
+});
+
+it('reports a risk raised and re-rated in the same week as both events', function (): void {
+    ['manager' => $manager, 'engagement' => $engagement] = reportSetup();
+
+    $risk = $engagement->registerRisk([
+        'title' => 'Legacy exports keep failing validation',
+        'probability' => RiskRating::Low->value,
+        'impact' => RiskRating::Medium->value,
+        'status' => RiskStatus::Open->value,
+        'visibility' => 'internal',
+    ], $manager);
+    $risk->reassess([
+        'probability' => RiskRating::High->value,
+        'impact' => RiskRating::High->value,
+    ], $manager);
+
+    $report = $engagement->publishWeeklyReport(BurnWeek::startOfWeekFor(now()), $manager);
+
+    $events = collect($report->reviewSnapshot->payload['changed'])
+        ->where('record.id', $risk->id)
+        ->keyBy('event');
+
+    /* Raised at its opening rating — not rewritten to where it ended up. */
+    expect($events->get('risk.raised')['detail'])->toBe('Low × Medium')
+        ->and($events->get('risk.rerated')['detail'])->toBe('Low × Medium → High × High');
+});
+
+it('refuses to publish a week before the baseline started', function (): void {
+    ['manager' => $manager, 'engagement' => $engagement] = reportSetup();
+
+    expect(fn () => $engagement->publishWeeklyReport(BurnWeek::startOfWeekFor(now())->subWeeks(5), $manager))
+        ->toThrow(ValidationException::class, 'Reporting starts with the baseline');
+
+    expect(Report::query()->count())->toBe(0);
+});
+
+it('keeps a superseded decision in the week it was confirmed', function (): void {
+    ['manager' => $manager, 'engagement' => $engagement] = reportSetup();
+
+    $first = $engagement->recordDecision([
+        'title' => 'SSO excluded from phase 1',
+        'context' => 'Window too short.',
+        'decision' => 'Excluded.',
+        'decided_on' => today(),
+        'visibility' => 'shared',
+    ], $manager);
+    $first->confirm($manager);
+
+    $second = $engagement->recordDecision([
+        'title' => 'SSO added to phase 2',
+        'context' => 'Budget freed up.',
+        'decision' => 'SSO ships in phase 2.',
+        'decided_on' => today(),
+        'supersedes_id' => $first->id,
+        'visibility' => 'shared',
+    ], $manager);
+    $second->confirm($manager);
+
+    $report = $engagement->publishWeeklyReport(BurnWeek::startOfWeekFor(now()), $manager);
+
+    $confirmed = collect($report->reviewSnapshot->payload['changed'])
+        ->where('event', 'decision.confirmed')
+        ->pluck('record.id');
+
+    /* Superseded is still confirmed history — the week's record stands. */
+    expect($confirmed)->toContain($first->id)
+        ->and($confirmed)->toContain($second->id);
+});
+
+it('freezes the publisher\'s name against later renames', function (): void {
+    ['manager' => $manager, 'engagement' => $engagement] = reportSetup();
+
+    $report = $engagement->publishWeeklyReport(lastWeek(), $manager);
+
+    $manager->forceFill(['name' => 'Someone Else'])->save();
+
+    expect($report->refresh()->published_by_name)->toBe('Dana Mertens');
+
+    $this->actingAs($manager)
+        ->get(route('reports.show', $report))
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('report.publishedByName', 'Dana Mertens'));
+});
+
 it('publishes a week once and refuses to touch it afterwards', function (): void {
     ['manager' => $manager, 'engagement' => $engagement] = reportSetup();
 

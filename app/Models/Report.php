@@ -30,6 +30,7 @@ use LogicException;
  * @property string|null $customer_snapshot_id
  * @property CarbonImmutable $published_at
  * @property string|null $published_by
+ * @property string|null $published_by_name
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Organization $organization
@@ -38,7 +39,7 @@ use LogicException;
  * @property-read Snapshot|null $customerSnapshot
  * @property-read User|null $publishedBy
  */
-#[Fillable(['week_start', 'published_at', 'published_by'])]
+#[Fillable(['week_start', 'published_at', 'published_by', 'published_by_name'])]
 class Report extends Model
 {
     use BelongsToOrganization, HasUuids;

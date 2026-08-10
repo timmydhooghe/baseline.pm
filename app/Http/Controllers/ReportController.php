@@ -56,14 +56,13 @@ class ReportController extends Controller
                 'weekLabel' => BurnWeek::labelFor($week),
             ], $due),
             'published' => $engagement->reports()
-                ->with('publishedBy')
                 ->get()
                 ->map(fn (Report $report): array => [
                     'id' => $report->id,
                     'weekStart' => $report->week_start->toDateString(),
                     'weekLabel' => $report->label(),
                     'publishedAt' => $report->published_at->toFormattedDayDateString(),
-                    'publishedByName' => $report->publishedBy?->name,
+                    'publishedByName' => $report->published_by_name,
                 ])
                 ->values(),
             'position' => $engagement->positionSummary(
@@ -151,7 +150,7 @@ class ReportController extends Controller
                 'weekStart' => $report->week_start->toDateString(),
                 'weekLabel' => $report->label(),
                 'publishedAt' => $report->published_at->toFormattedDayDateString(),
-                'publishedByName' => $report->publishedBy?->name,
+                'publishedByName' => $report->published_by_name,
             ],
             'variants' => [
                 'internal' => $this->forViewer($report->reviewSnapshot->payload ?? [], $withCommercials),

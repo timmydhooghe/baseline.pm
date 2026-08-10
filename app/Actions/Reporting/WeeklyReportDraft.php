@@ -43,8 +43,13 @@ class WeeklyReportDraft
         $weekEnd = $weekStart->addWeek();
         $approved = $engagement->approvedBaseline();
 
+        /*
+         * The diff baseline is the last report the customer actually
+         * received, not the previous calendar week — a skipped week must not
+         * cost the reader their deltas. The relation orders newest first.
+         */
         $previous = $engagement->reports()
-            ->whereDate('week_start', $weekStart->subWeek()->toDateString())
+            ->whereDate('week_start', '<', $weekStart->toDateString())
             ->first();
         $previousPayload = ($internal ? $previous?->reviewSnapshot : $previous?->customerSnapshot)?->payload;
 
@@ -178,7 +183,14 @@ class WeeklyReportDraft
             }
         }
 
-        $decisions = $engagement->decisions()->where('status', DecisionStatus::Confirmed)->get();
+        /*
+         * Superseded entries stay: a decision later replaced was still
+         * confirmed in the week it was confirmed, and the report is the
+         * record of that week — not of what the ledger says today.
+         */
+        $decisions = $engagement->decisions()
+            ->whereIn('status', [DecisionStatus::Confirmed, DecisionStatus::Superseded])
+            ->get();
 
         foreach ($decisions as $decision) {
             if (! $internal && ! $decision->visibility->isShared()) {
@@ -221,9 +233,11 @@ class WeeklyReportDraft
     }
 
     /**
-     * The register events a risk produced this week: raised, or re-rated by
-     * a revision that changed its rating. The opening revision is the
-     * raising, not a re-rating.
+     * The register events a risk produced this week: raised, and re-rated by
+     * a revision that changed its rating. A risk raised and re-rated inside
+     * the same week yields both — raised at its opening rating, then moved —
+     * because reporting it as "raised high" when it was raised low would
+     * rewrite the register's history.
      *
      * @param  callable(DateTimeInterface|null): bool  $within
      * @return list<array<string, mixed>>
@@ -232,27 +246,39 @@ class WeeklyReportDraft
     {
         $rating = fn (RiskRevision|Risk $rated): string => $rated->probability->label().' × '.$rated->impact->label();
 
-        if ($risk->created_at !== null && $within($risk->created_at)) {
-            return [$this->event($risk, 'risk.raised', __('Risk raised'), $risk->created_at, $rating($risk))];
-        }
-
         $revisions = $risk->revisions->sortBy('created_at')->values();
-        $inWindow = $revisions->filter(fn (RiskRevision $revision): bool => $within($revision->created_at));
+        $inWindow = $revisions->filter(fn (RiskRevision $revision): bool => $within($revision->created_at))->values();
 
-        if ($inWindow->isEmpty()) {
-            return [];
+        $events = [];
+        $raised = false;
+        $createdAt = $risk->created_at;
+
+        if ($createdAt !== null && $within($createdAt)) {
+            $raised = true;
+            $opening = $revisions->first();
+            $events[] = $this->event($risk, 'risk.raised', __('Risk raised'), $createdAt, $rating($opening ?? $risk));
         }
 
+        /*
+         * The week's last rating is read against the opening revision when
+         * the risk was raised this week, and against the latest revision
+         * before the window otherwise.
+         */
+        $first = $inWindow->first();
         $last = $inWindow->last();
-        $before = $revisions
-            ->filter(fn (RiskRevision $revision): bool => $revision->created_at->lessThan($inWindow->first()->created_at))
-            ->last();
+        $before = match (true) {
+            $raised => $revisions->first(),
+            $first === null => null,
+            default => $revisions
+                ->filter(fn (RiskRevision $revision): bool => $revision->created_at->lessThan($first->created_at))
+                ->last(),
+        };
 
-        if ($before === null || $rating($before) === $rating($last)) {
-            return [];
+        if ($last !== null && $before !== null && ! $last->is($before) && $rating($before) !== $rating($last)) {
+            $events[] = $this->event($risk, 'risk.rerated', __('Risk re-rated'), $last->created_at, $rating($before).' → '.$rating($last));
         }
 
-        return [$this->event($risk, 'risk.rerated', __('Risk re-rated'), $last->created_at, $rating($before).' → '.$rating($last))];
+        return $events;
     }
 
     /**

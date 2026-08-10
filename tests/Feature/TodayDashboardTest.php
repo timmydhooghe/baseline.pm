@@ -97,6 +97,32 @@ test('an engagement with nothing to flag collapses to one quiet line', function 
             ->where('quiet.0.line', 'Baseline v1 · 0 of 2 deliverables accepted'));
 });
 
+test('the dashboard aggregates loud and quiet engagements across the portfolio', function () {
+    ['manager' => $manager, 'organization' => $organization, 'engagement' => $engagement] = burnSetup();
+
+    WorkItem::factory()->for($organization)->for($engagement)->create();
+
+    /* A second engagement with nothing to flag stays to its one line. */
+    $globex = Customer::factory()->for($organization)->create(['name' => 'Globex']);
+    Engagement::factory()
+        ->for($organization)
+        ->for($globex)
+        ->status(EngagementStatus::Active)
+        ->create(['name' => 'Portal build']);
+
+    $this->actingAs($manager)
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('dashboard')
+            ->where('engagementCount', 2)
+            ->has('sections.scopeCreep', 1)
+            ->where('sections.scopeCreep.0.engagementName', 'ERP rollout')
+            ->has('quiet', 1)
+            ->where('quiet.0.name', 'Portal build')
+            ->where('quiet.0.line', 'No approved baseline yet.'));
+});
+
 test('scope creep pricing and the governance queues stay with the roles that may read them', function () {
     ['organization' => $organization, 'engagement' => $engagement] = burnSetup();
 

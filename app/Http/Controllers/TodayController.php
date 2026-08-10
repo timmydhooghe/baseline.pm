@@ -9,10 +9,13 @@ use App\Enums\EngagementStatus;
 use App\Enums\FinalAcceptanceStatus;
 use App\Models\BaselineItem;
 use App\Models\BurnWeek;
+use App\Models\ChangeRequest;
+use App\Models\Deliverable;
 use App\Models\Engagement;
 use App\Models\RateCardVersion;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
@@ -26,6 +29,12 @@ use Inertia\Response;
  * unrecorded burn weeks and unpublished report drafts. Engagements with
  * nothing to flag are summarized in one quiet line each, and the rail keeps
  * the calendar honest: upcoming milestones and what the customer owes.
+ *
+ * Everything the exceptions read is eager-loaded once for the whole
+ * portfolio — one query per relation, however many engagements are running —
+ * and the engagement's own methods read those loaded relations in memory. A
+ * dashboard that issued a query cascade per engagement would be the first
+ * page to fall over exactly when the portfolio grows.
  *
  * Scope creep pricing, risk exposure and the burn and report queues follow
  * the visibility rules they have everywhere else: commercial figures for the
@@ -48,7 +57,31 @@ class TodayController extends Controller
 
         $engagements = Engagement::query()
             ->whereIn('status', [EngagementStatus::Active, EngagementStatus::AwaitingFinalAcceptance])
-            ->with('customer')
+            ->with([
+                'customer',
+                'baselines.items',
+                'baselines.allocations.role',
+                'baselines.rateCardVersion.roles',
+                /*
+                 * Only the untriaged unmapped items — the scope creep queue —
+                 * with the worklogs their pricing derives from.
+                 */
+                'workItems' => fn ($query) => $query
+                    ->whereDoesntHave('link')
+                    ->whereNull('triage_status')
+                    ->with(['worklogs', 'link']),
+                'changeRequests',
+                'deliverables.baselineItem',
+                'dependencies.responsibleStakeholder',
+                'dependencies.responsibleUser',
+                'dependencies.links.affected',
+                'risks.revisions',
+                'risks.exposures.role',
+                'risks.owner',
+                'burnWeeks',
+                'reports',
+                'finalAcceptances',
+            ])
             ->orderBy('name')
             ->get();
 
@@ -117,12 +150,7 @@ class TodayController extends Controller
             ];
         }
 
-        $awaiting = $engagement->changeRequests()
-            ->where('status', ChangeRequestStatus::AwaitingApproval)
-            ->orderBy('respond_by')
-            ->get();
-
-        foreach ($awaiting as $changeRequest) {
+        foreach ($this->awaitingChangeRequests($engagement) as $changeRequest) {
             $flagged = true;
             $sections['changeRequests'][] = [
                 ...$reference,
@@ -202,8 +230,10 @@ class TodayController extends Controller
     private function quietLine(Engagement $engagement): array
     {
         $baseline = $engagement->approvedBaseline();
-        $accepted = $engagement->deliverables()->where('status', DeliverableStatus::Accepted)->count();
-        $total = $engagement->deliverables()->count();
+        $accepted = $engagement->deliverables
+            ->filter(fn (Deliverable $deliverable): bool => $deliverable->status === DeliverableStatus::Accepted)
+            ->count();
+        $total = $engagement->deliverables->count();
 
         return [
             'id' => $engagement->id,
@@ -235,17 +265,15 @@ class TodayController extends Controller
             return [];
         }
 
-        $openByMilestone = $engagement->deliverables()
-            ->whereNot('status', DeliverableStatus::Accepted)
-            ->whereNotNull('milestone_item_id')
-            ->get()
+        $openByMilestone = $engagement->deliverables
+            ->filter(fn (Deliverable $deliverable): bool => $deliverable->status !== DeliverableStatus::Accepted
+                && $deliverable->milestone_item_id !== null)
             ->countBy('milestone_item_id');
 
-        return array_values($baseline->items()
-            ->where('type', BaselineItemType::Milestone)
-            ->whereNotNull('baseline_date')
-            ->orderBy('baseline_date')
-            ->get()
+        return array_values($baseline->items
+            ->filter(fn (BaselineItem $item): bool => $item->type === BaselineItemType::Milestone
+                && $item->baseline_date !== null)
+            ->sortBy('baseline_date')
             ->map(function (BaselineItem $item) use ($engagement, $openByMilestone): ?array {
                 $open = (int) ($openByMilestone[$item->id] ?? 0);
                 $past = $item->baseline_date !== null && $item->baseline_date->isPast();
@@ -284,18 +312,12 @@ class TodayController extends Controller
             $actions[] = $this->customerAction($engagement, 'dependency', $dependency->id, $dependency->title, $dependency->required_on, $dependency->isLate(), $dependency->responsibleName());
         }
 
-        $awaiting = $engagement->changeRequests()
-            ->where('status', ChangeRequestStatus::AwaitingApproval)
-            ->get();
-
-        foreach ($awaiting as $changeRequest) {
+        foreach ($this->awaitingChangeRequests($engagement) as $changeRequest) {
             $actions[] = $this->customerAction($engagement, 'change_request', $changeRequest->id, $changeRequest->title, $changeRequest->respond_by, $changeRequest->respond_by?->isPast() ?? false);
         }
 
-        $submitted = $engagement->deliverables()
-            ->where('status', DeliverableStatus::AwaitingAcceptance)
-            ->with('baselineItem')
-            ->get();
+        $submitted = $engagement->deliverables
+            ->filter(fn (Deliverable $deliverable): bool => $deliverable->status === DeliverableStatus::AwaitingAcceptance);
 
         foreach ($submitted as $deliverable) {
             $actions[] = $this->customerAction($engagement, 'deliverable', $deliverable->id, $deliverable->baselineItem->title, $deliverable->respond_by, $deliverable->respond_by?->isPast() ?? false);
@@ -308,6 +330,20 @@ class TodayController extends Controller
         }
 
         return $actions;
+    }
+
+    /**
+     * The change requests waiting on the customer, nearest deadline first —
+     * read from the loaded relation, undated ones last.
+     *
+     * @return Collection<int, ChangeRequest>
+     */
+    private function awaitingChangeRequests(Engagement $engagement): Collection
+    {
+        return $engagement->changeRequests
+            ->filter(fn (ChangeRequest $changeRequest): bool => $changeRequest->status === ChangeRequestStatus::AwaitingApproval)
+            ->sortBy(fn (ChangeRequest $changeRequest): int => $changeRequest->respond_by?->getTimestamp() ?? PHP_INT_MAX)
+            ->values();
     }
 
     /**

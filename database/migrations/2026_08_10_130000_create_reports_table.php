@@ -24,6 +24,13 @@ return new class extends Migration
             $table->foreignUuid('customer_snapshot_id')->nullable()->constrained('snapshots')->nullOnDelete();
             $table->timestamp('published_at');
             $table->foreignUuid('published_by')->nullable()->constrained('users')->nullOnDelete();
+            /*
+             * Denormalized on purpose: the report is immutable, so its
+             * attribution must survive the publisher being renamed or
+             * removed. The foreign key is the inference; the name is the
+             * record.
+             */
+            $table->string('published_by_name')->nullable();
             $table->timestamps();
 
             $table->unique(['engagement_id', 'week_start']);
