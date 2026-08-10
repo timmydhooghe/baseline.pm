@@ -187,6 +187,17 @@ class Baseline extends Model
                 ]);
             }
 
+            /*
+             * A submitted baseline waits on a customer decision, so
+             * submitting with nobody able to decide would strand the
+             * engagement in awaiting approval.
+             */
+            if ($this->approvers()->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'approvers' => __('The customer has no stakeholder with approval rights — add an approver before submitting.'),
+                ]);
+            }
+
             $review = Snapshot::capture($this, $this->snapshotPayload(internal: true), $submitter);
             $customer = Snapshot::capture($this, $this->snapshotPayload(internal: false), $submitter);
 
@@ -277,11 +288,14 @@ class Baseline extends Model
     /**
      * Record the customer's decision on the frozen submission (FA-27). The
      * response is stored immutably against the customer snapshot it was made
-     * on. Approval commits the baseline and activates the engagement;
-     * rejection and clarification requests both return the draft to the
-     * builder — the snapshots stay on record either way.
+     * on; callers pass the snapshot their page displayed, and the comparison
+     * happens under the row lock so a decision can never land on terms
+     * frozen after that page was opened. Approval commits the baseline and
+     * activates the engagement; rejection and clarification requests both
+     * return the draft to the builder — the snapshots stay on record either
+     * way.
      */
-    public function recordResponse(Stakeholder $stakeholder, BaselineDecision $decision, ?string $comment = null): BaselineResponse
+    public function recordResponse(Stakeholder $stakeholder, BaselineDecision $decision, ?string $comment = null, ?string $displayedSnapshotId = null): BaselineResponse
     {
         if (! $stakeholder->role->canApprove()) {
             throw ValidationException::withMessages([
@@ -289,7 +303,7 @@ class Baseline extends Model
             ]);
         }
 
-        return DB::transaction(function () use ($stakeholder, $decision, $comment): BaselineResponse {
+        return DB::transaction(function () use ($stakeholder, $decision, $comment, $displayedSnapshotId): BaselineResponse {
             self::query()->whereKey($this->id)->lockForUpdate()->first();
 
             $this->unsetRelations();
@@ -302,6 +316,12 @@ class Baseline extends Model
             if ($this->status !== BaselineStatus::AwaitingApproval || $this->customer_snapshot_id === null) {
                 throw ValidationException::withMessages([
                     'decision' => __('This baseline is no longer awaiting a decision.'),
+                ]);
+            }
+
+            if ($displayedSnapshotId !== null && $displayedSnapshotId !== $this->customer_snapshot_id) {
+                throw ValidationException::withMessages([
+                    'decision' => __('This baseline was revised after this page was opened — review the latest version from your most recent email.'),
                 ]);
             }
 

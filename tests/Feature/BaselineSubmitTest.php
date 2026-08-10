@@ -66,6 +66,9 @@ function submittableBaseline(): array
         ]);
     }
 
+    /* Submission requires somebody on the customer side able to decide. */
+    acmeApprover($baseline);
+
     return [$manager, $baseline, $engagement];
 }
 
@@ -147,6 +150,7 @@ test('acknowledged warnings unblock submission and are frozen into the snapshot'
     $baseline = Baseline::factory()->for($manager->organization)->create([
         'contract_value' => Money::fromCents(2000000),
     ]);
+    acmeApprover($baseline);
 
     $this->actingAs($manager)
         ->post(route('baselines.checks.acknowledge', $baseline), ['check' => 'values_match_contract'])
@@ -170,6 +174,18 @@ test('unknown completeness checks cannot be acknowledged', function () {
     $this->actingAs($manager)
         ->post(route('baselines.checks.acknowledge', $baseline), ['check' => 'imaginary_check'])
         ->assertInvalid(['check']);
+});
+
+test('a baseline cannot be submitted while nobody on the customer side may approve', function () {
+    [$manager, $baseline] = submittableBaseline();
+    $baseline->engagement->customer->stakeholders()->update(['role' => StakeholderRole::Viewer]);
+
+    $this->actingAs($manager)
+        ->post(route('baselines.submit', $baseline))
+        ->assertInvalid(['approvers']);
+
+    expect($baseline->refresh()->status)->toBe(BaselineStatus::Draft)
+        ->and(Snapshot::query()->where('subject_id', $baseline->id)->count())->toBe(0);
 });
 
 test('members cannot submit a baseline', function () {

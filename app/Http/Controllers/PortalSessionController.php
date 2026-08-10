@@ -60,6 +60,10 @@ class PortalSessionController extends Controller
      * Establish the portal session from a signed sign-in link. The
      * stakeholder is resolved by the signed parameter, never by tenant
      * scope, and the session id is regenerated against fixation.
+     *
+     * Deliberately a plain session, no remember-me cookie: a year-long
+     * recaller from one 30-minute link would quietly outlive any shared
+     * machine, and requesting a fresh link costs the stakeholder nothing.
      */
     public function consume(Request $request, string $stakeholder): RedirectResponse
     {
@@ -67,7 +71,7 @@ class PortalSessionController extends Controller
             ->withoutGlobalScope(OrganizationScope::class)
             ->findOrFail($stakeholder);
 
-        Auth::guard('stakeholder')->login($record, remember: true);
+        Auth::guard('stakeholder')->login($record);
 
         $request->session()->regenerate();
 

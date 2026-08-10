@@ -96,7 +96,10 @@ export default function PortalBaseline({
                         happens on the latest version in your inbox.
                     </div>
                 )}
-                {baseline.status === 'approved' && (
+                {/* A superseded page never claims approval: the decision on
+                    record belongs to a later revision's terms, not to the
+                    frozen submission shown here. */}
+                {!superseded && baseline.status === 'approved' && (
                     <div className="border-[1.5px] border-moss px-4 py-3 font-plex-mono text-[12px] font-semibold text-moss uppercase">
                         Approved {baseline.approvedAt} — this is the committed
                         version the engagement runs against.

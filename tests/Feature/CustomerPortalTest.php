@@ -27,6 +27,7 @@ use App\ValueObjects\Money;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia as Assert;
 
 /**
@@ -261,10 +262,16 @@ test('the emailed link signs the stakeholder in and expires', function () {
     $this->get(URL::temporarySignedRoute('portal.login.consume', now()->subMinute(), ['stakeholder' => $stakeholder->id]))->assertForbidden();
     $this->assertGuest('stakeholder');
 
-    $this->get(URL::temporarySignedRoute('portal.login.consume', now()->addMinutes(30), ['stakeholder' => $stakeholder->id]))
+    $response = $this->get(URL::temporarySignedRoute('portal.login.consume', now()->addMinutes(30), ['stakeholder' => $stakeholder->id]))
         ->assertRedirect(route('portal.home'));
 
     $this->assertAuthenticatedAs($stakeholder, 'stakeholder');
+
+    /* A plain session only — one magic link must not mint a remember cookie. */
+    $cookieNames = collect($response->headers->getCookies())
+        ->map(fn ($cookie): string => $cookie->getName());
+
+    expect($cookieNames->filter(fn (string $name): bool => str_starts_with($name, 'remember_'))->all())->toBe([]);
 });
 
 test('the portal front door routes by session state', function () {
@@ -537,7 +544,12 @@ test('a superseded snapshot link goes read-only and can no longer decide', funct
     $baseline = $setup['baseline'];
     $staleSnapshot = $baseline->customer_snapshot_id;
 
-    $baseline->returnToDraft('clarification_requested', $setup['approver']);
+    /* The clarification is recorded on the first submission's terms. */
+    $this->post(signedBaselineUrl('portal.baselines.respond', $baseline, $setup['approver'], $staleSnapshot), [
+        'decision' => 'clarification_requested',
+        'comment' => 'Which environments does go-live cover?',
+    ])->assertRedirect();
+
     $baseline->refresh()->submitForApproval($setup['manager']);
     $baseline->refresh();
 
@@ -552,6 +564,55 @@ test('a superseded snapshot link goes read-only and can no longer decide', funct
     ])->assertInvalid(['decision']);
 
     expect($baseline->refresh()->status)->toBe(BaselineStatus::AwaitingApproval);
+});
+
+test('a superseded link shows only the decisions made on its own terms', function () {
+    $setup = portalBaselineSetup();
+    $baseline = $setup['baseline'];
+    $staleSnapshot = $baseline->customer_snapshot_id;
+
+    $this->post(signedBaselineUrl('portal.baselines.respond', $baseline, $setup['approver'], $staleSnapshot), [
+        'decision' => 'clarification_requested',
+    ])->assertRedirect();
+
+    $baseline->refresh()->submitForApproval($setup['manager']);
+    $baseline->refresh();
+
+    $this->post(signedBaselineUrl('portal.baselines.respond', $baseline, $setup['approver']), [
+        'decision' => 'approved',
+    ])->assertRedirect();
+
+    /* The second submission's approval never bleeds into the first page. */
+    $this->get(signedBaselineUrl('portal.baselines.show', $baseline->refresh(), $setup['approver'], $staleSnapshot))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('superseded', true)
+            ->has('responses', 1)
+            ->where('responses.0.decision', 'clarification_requested'));
+
+    $this->get(signedBaselineUrl('portal.baselines.show', $baseline, $setup['approver']))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('superseded', false)
+            ->has('responses', 1)
+            ->where('responses.0.decision', 'approved'));
+});
+
+test('a decision is refused under the lock when the displayed snapshot is no longer current', function () {
+    $setup = portalBaselineSetup();
+    $baseline = $setup['baseline'];
+    $staleSnapshot = $baseline->customer_snapshot_id;
+
+    /* The revision lands after the approver's page passed its own check. */
+    $baseline->returnToDraft('clarification_requested', $setup['approver']);
+    $baseline->refresh()->submitForApproval($setup['manager']);
+    $baseline->refresh();
+
+    expect(fn () => $baseline->recordResponse($setup['approver'], BaselineDecision::Approved, null, $staleSnapshot))
+        ->toThrow(ValidationException::class);
+
+    expect($baseline->refresh()->status)->toBe(BaselineStatus::AwaitingApproval)
+        ->and($baseline->responses)->toHaveCount(0);
 });
 
 test('a decided baseline refuses further responses', function () {
