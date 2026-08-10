@@ -100,7 +100,13 @@ class PortalChangeRequestController extends Controller
         $decision = ChangeRequestDecision::from((string) $validated['decision']);
         $comment = isset($validated['comment']) && is_string($validated['comment']) ? $validated['comment'] : null;
 
-        $changeRequest->recordResponse($stakeholder, $decision, $comment);
+        /*
+         * The snapshot travels into the model so the currency check happens
+         * again under the row lock — the comparison above is only fast
+         * feedback, and a revision landing between it and the lock must not
+         * record this decision against terms the stakeholder never saw.
+         */
+        $changeRequest->recordResponse($stakeholder, $decision, $comment, $snapshot->id);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => match ($decision) {
             ChangeRequestDecision::Approved => __('Approved — thank you. The agreed change is now part of the committed baseline.'),

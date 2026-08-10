@@ -714,6 +714,30 @@ test('a stale portal link cannot decide on a revised proposal', function () {
             ->where('responses.0.decision', 'approved'));
 });
 
+test('a decision is refused under the lock when the displayed proposal is no longer current', function () {
+    Notification::fake();
+
+    $setup = changeControlSetup();
+    ['manager' => $manager, 'approver' => $approver] = $setup;
+    $changeRequest = priceProposal($setup);
+    $changeRequest->submitToCustomer(today()->addDays(14), $manager);
+
+    $staleSnapshotId = $changeRequest->refresh()->customer_snapshot_id;
+
+    // The revision lands after the approver's page passed its own check.
+    $changeRequest->recordResponse($approver, ChangeRequestDecision::ClarificationRequested);
+    $changeRequest->refresh()->moveToProposal($manager);
+    $changeRequest->update(['customer_price' => Money::fromCents(480000)]);
+    $changeRequest->submitToCustomer(today()->addDays(14), $manager);
+    $changeRequest->refresh();
+
+    expect(fn () => $changeRequest->recordResponse($approver, ChangeRequestDecision::Approved, null, $staleSnapshotId))
+        ->toThrow(ValidationException::class);
+
+    expect($changeRequest->refresh()->status)->toBe(ChangeRequestStatus::AwaitingApproval)
+        ->and($changeRequest->responses)->toHaveCount(1);
+});
+
 test('approval rebases schedule impact when another change advanced the baseline first', function () {
     Notification::fake();
 

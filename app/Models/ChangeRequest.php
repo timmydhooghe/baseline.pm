@@ -291,11 +291,14 @@ class ChangeRequest extends Model
 
     /**
      * Record the customer's decision on the frozen proposal (FA-13). The
-     * response is stored immutably against the snapshot it was made on.
-     * Approval mints the next baseline version, rejection is terminal, and a
-     * clarification request reopens the assessment.
+     * response is stored immutably against the snapshot it was made on;
+     * callers pass the snapshot their page displayed, and the comparison
+     * happens under the row lock so a decision can never land on terms
+     * frozen after that page was opened. Approval mints the next baseline
+     * version, rejection is terminal, and a clarification request reopens
+     * the assessment.
      */
-    public function recordResponse(Stakeholder $stakeholder, ChangeRequestDecision $decision, ?string $comment = null): ChangeRequestResponse
+    public function recordResponse(Stakeholder $stakeholder, ChangeRequestDecision $decision, ?string $comment = null, ?string $displayedSnapshotId = null): ChangeRequestResponse
     {
         if (! $stakeholder->role->canApprove()) {
             throw ValidationException::withMessages([
@@ -303,7 +306,7 @@ class ChangeRequest extends Model
             ]);
         }
 
-        return DB::transaction(function () use ($stakeholder, $decision, $comment): ChangeRequestResponse {
+        return DB::transaction(function () use ($stakeholder, $decision, $comment, $displayedSnapshotId): ChangeRequestResponse {
             self::query()->whereKey($this->id)->lockForUpdate()->first();
 
             $this->unsetRelations();
@@ -316,6 +319,12 @@ class ChangeRequest extends Model
             if ($this->status !== ChangeRequestStatus::AwaitingApproval || $this->customer_snapshot_id === null) {
                 throw ValidationException::withMessages([
                     'decision' => __('This proposal is no longer awaiting a decision.'),
+                ]);
+            }
+
+            if ($displayedSnapshotId !== null && $displayedSnapshotId !== $this->customer_snapshot_id) {
+                throw ValidationException::withMessages([
+                    'decision' => __('This proposal was revised after this page was opened — review the latest version from your most recent email.'),
                 ]);
             }
 

@@ -958,6 +958,30 @@ test('a stale portal link cannot sign a revised deliverable', function () {
             ->where('responses.0.decision', 'accepted'));
 });
 
+test('a signature is refused under the lock when the displayed record is no longer current', function () {
+    Notification::fake();
+
+    $setup = acceptanceSetup();
+    ['manager' => $manager, 'approver' => $approver, 'checkoutRecord' => $record] = $setup;
+
+    linkCriterionEvidence($record, $manager);
+    $record->submitForAcceptance(today()->addDays(14), $manager);
+
+    $staleSnapshotId = $record->refresh()->customer_snapshot_id;
+
+    // The rework lands after the approver's page passed its own check.
+    $record->recordResponse($approver, AcceptanceDecision::ClarificationRequested);
+    $record->refresh()->update(['progress' => 95]);
+    $record->submitForAcceptance(today()->addDays(7), $manager);
+    $record->refresh();
+
+    expect(fn () => $record->recordResponse($approver, AcceptanceDecision::Accepted, null, $staleSnapshotId))
+        ->toThrow(ValidationException::class);
+
+    expect($record->refresh()->status)->toBe(DeliverableStatus::AwaitingAcceptance)
+        ->and($record->responses)->toHaveCount(1);
+});
+
 test('a review link naming a snapshot of another record is refused', function () {
     Notification::fake();
 

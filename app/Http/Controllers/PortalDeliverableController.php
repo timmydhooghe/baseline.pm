@@ -102,7 +102,13 @@ class PortalDeliverableController extends Controller
         $decision = AcceptanceDecision::from((string) $validated['decision']);
         $comment = isset($validated['comment']) && is_string($validated['comment']) ? $validated['comment'] : null;
 
-        $deliverable->recordResponse($stakeholder, $decision, $comment);
+        /*
+         * The snapshot travels into the model so the currency check happens
+         * again under the row lock — the comparison above is only fast
+         * feedback, and a revision landing between it and the lock must not
+         * record this signature against a record the stakeholder never saw.
+         */
+        $deliverable->recordResponse($stakeholder, $decision, $comment, $snapshot->id);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => match ($decision) {
             AcceptanceDecision::Accepted => __('Accepted — thank you. Your signature is on record and the deliverable counts as delivered.'),

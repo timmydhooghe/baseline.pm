@@ -322,12 +322,15 @@ class Deliverable extends Model
 
     /**
      * Record the customer's decision on the frozen review (FA-23). The
-     * response is stored immutably against the snapshot it was made on.
-     * Acceptance is the signature — it freezes the signed-off value onto the
-     * record and is terminal. Rejection reopens the record for rework; a
-     * clarification request reopens it without a verdict.
+     * response is stored immutably against the snapshot it was made on;
+     * callers pass the snapshot their page displayed, and the comparison
+     * happens under the row lock so a signature can never land on a record
+     * frozen after that page was opened. Acceptance is the signature — it
+     * freezes the signed-off value onto the record and is terminal.
+     * Rejection reopens the record for rework; a clarification request
+     * reopens it without a verdict.
      */
-    public function recordResponse(Stakeholder $stakeholder, AcceptanceDecision $decision, ?string $comment = null): DeliverableResponse
+    public function recordResponse(Stakeholder $stakeholder, AcceptanceDecision $decision, ?string $comment = null, ?string $displayedSnapshotId = null): DeliverableResponse
     {
         if (! $stakeholder->role->canApprove()) {
             throw ValidationException::withMessages([
@@ -335,7 +338,7 @@ class Deliverable extends Model
             ]);
         }
 
-        return DB::transaction(function () use ($stakeholder, $decision, $comment): DeliverableResponse {
+        return DB::transaction(function () use ($stakeholder, $decision, $comment, $displayedSnapshotId): DeliverableResponse {
             self::query()->whereKey($this->id)->lockForUpdate()->first();
 
             $this->unsetRelations();
@@ -348,6 +351,12 @@ class Deliverable extends Model
             if ($this->status !== DeliverableStatus::AwaitingAcceptance || $this->customer_snapshot_id === null) {
                 throw ValidationException::withMessages([
                     'decision' => __('This deliverable is no longer awaiting a decision.'),
+                ]);
+            }
+
+            if ($displayedSnapshotId !== null && $displayedSnapshotId !== $this->customer_snapshot_id) {
+                throw ValidationException::withMessages([
+                    'decision' => __('This deliverable was revised after this page was opened — review the latest version from your most recent email.'),
                 ]);
             }
 
